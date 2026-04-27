@@ -10,6 +10,8 @@
 
 WiFi-pulse leest realtime data uit je UniFi Dream Machine en tekent een sleepbare topology met TorFlow-stijl streams, een 2.4/5 GHz spectrum-analyzer en een uitgebreide stats-pagina. Geen externe diensten, alles lokaal.
 
+> 📸 **Screenshots volgen** — eerst wordt een demo-mode toegevoegd zodat schermafbeeldingen geen privé-data tonen.
+
 ## Features
 
 - **Sleepbare topology** met UDM, WAN, AP's en clients
