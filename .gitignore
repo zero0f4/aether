@@ -1,0 +1,24 @@
+# ─── Privacy / runtime data ───────────────────
+.env
+.env.local
+
+# ─── Dependencies ─────────────────────────────
+node_modules/
+package-lock.json
+
+# ─── OS / editor ──────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Logs / runtime ───────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+.tmp/
+*.local

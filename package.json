@@ -1,0 +1,42 @@
+{
+  "name": "wifi-pulse",
+  "version": "0.2.0",
+  "description": "Live UniFi WiFi visualisatie — organische deeltjeswolk per device, sleepbare topologie, spectrum-analyzer.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "wifi",
+    "unifi",
+    "udm",
+    "ubiquiti",
+    "visualization",
+    "monitoring",
+    "spectrum-analyzer",
+    "wifi-6e",
+    "mcp",
+    "torflow"
+  ],
+  "author": "zero0f4",
+  "license": "MIT",
+  "homepage": "https://github.com/zero0f4/wifi-pulse#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zero0f4/wifi-pulse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zero0f4/wifi-pulse/issues"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0",
+    "dotenv": "^16.4.5",
+    "undici": "^6.19.8",
+    "express-rate-limit": "^8.4.1"
+  }
+}
