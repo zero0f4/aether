@@ -46,7 +46,7 @@ function killPid(pid, label) {
 })();
 
 const {
-  UDM_HOST = '192.168.1.1',
+  UDM_HOST = '',  // verplicht via .env / setup-wizard
   UDM_USER = '',
   UDM_PASS = '',
   UDM_SITE = 'default',

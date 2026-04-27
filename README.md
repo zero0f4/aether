@@ -39,7 +39,7 @@ Open <http://localhost:3033>.
 
 | Var | Default | Doel |
 |---|---|---|
-| `UDM_HOST` | `192.168.1.1` | IP van je UniFi controller |
+| `UDM_HOST` | — | IP van je UniFi controller (verplicht) |
 | `UDM_USER` | — | UniFi local user (read-only ok) |
 | `UDM_PASS` | — | Wachtwoord |
 | `UDM_SITE` | `default` | Site-naam |

@@ -38,6 +38,7 @@ const I18N = {
     'cb.roaming': 'roaming events',
     'cb.snr': 'signaal: SNR i.p.v. RSSI',
     'cb.deviceInfo': 'OS / fabrikant in top-table',
+    'cb.showIps': 'IP-adressen tonen (privacy: standaard uit)',
     'search.ph': '🔍 zoek client/ap…',
     'search.count': '{n} match',
     'search.count_plural': '{n} matches',
@@ -171,6 +172,7 @@ const I18N = {
     'cb.roaming': 'roaming events',
     'cb.snr': 'signal: SNR instead of RSSI',
     'cb.deviceInfo': 'OS / manufacturer in top-table',
+    'cb.showIps': 'show IP addresses (privacy: off by default)',
     'search.ph': '🔍 search client/ap…',
     'search.count': '{n} match',
     'search.count_plural': '{n} matches',
@@ -319,8 +321,20 @@ const PREFS_DEFAULTS = {
   showRoaming: true,
   useSnr: false,
   showDeviceInfo: false,
+  showIps: false,
   theme: 'dark',
 };
+
+// IP-masker: per default verberg IPs (privacy). Toggle via prefs.showIps.
+function maskIp(ip) {
+  if (!ip || prefs.showIps) return ip || '';
+  // Toon alleen netwerk-segment, mask laatste octet: 192.168.1.42 → 192.168.1.•
+  const v4 = String(ip).match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.)\d{1,3}$/);
+  if (v4) return v4[1] + '•';
+  // IPv6 of vreemd → volledig maskeren
+  if (/[:.]/.test(ip)) return '•••.•••.•••.•';
+  return ip;
+}
 const prefs = Object.assign({}, PREFS_DEFAULTS, (() => {
   try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch { return {}; }
 })());
@@ -560,7 +574,7 @@ function renderUdmTip() {
 
 function renderWanTip() {
   const rows = [`<strong>${t('wan.title_prefix')} ${(wan.isp || 'INTERNET').toUpperCase()}</strong>`, `<hr>`];
-  if (wan.ip) rows.push(`<div class="row"><span class="lab">${t('wan.public_ip')}</span><span class="v">${wan.ip}</span></div>`);
+  if (wan.ip) rows.push(`<div class="row"><span class="lab">${t('wan.public_ip')}</span><span class="v">${maskIp(wan.ip)}</span></div>`);
   if (wan.status) rows.push(`<div class="row"><span class="lab">${t('wan.status')}</span><span class="v ok">${wan.status}</span></div>`);
   rows.push(`<div class="row"><span class="lab">${t('station.download')}</span><span class="v">${fmtBpsNice(wan.rxBps || 0)}</span></div>`);
   rows.push(`<div class="row"><span class="lab">${t('station.upload')}</span><span class="v">${fmtBpsNice(wan.txBps || 0)}</span></div>`);
@@ -1737,7 +1751,7 @@ function drawWAN() {
   if (wan.ip) {
     ctx.fillStyle = 'rgba(184,255,208,0.55)';
     ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace';
-    ctx.fillText(wan.ip, wan.x, wan.y - 10);
+    ctx.fillText(maskIp(wan.ip), wan.x, wan.y - 10);
   }
   ctx.fillStyle = 'rgba(184,255,208,0.7)';
   ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace';
@@ -1943,7 +1957,7 @@ function refreshUI() {
   ui.uptime.textContent = fmtUptime(Date.now() - sessionStart);
   ui.wanRx.innerHTML = fmtKbps(wan.rxBps || 0);
   ui.wanTx.innerHTML = fmtKbps(wan.txBps || 0);
-  ui.isp.textContent = (wan.isp || '—') + (wan.ip ? ' · ' + wan.ip : '');
+  ui.isp.textContent = (wan.isp || '—') + (wan.ip ? ' · ' + maskIp(wan.ip) : '');
   if (ui.latency) {
     ui.latencyWrap.style.display = prefs.showLatency ? '' : 'none';
     if (wan.latency != null) {
@@ -3095,7 +3109,7 @@ function renderDrawer() {
     <div class="kv">
       <span class="k">${t('ap.mac')}</span><span class="v">${escapeHtml(ap.mac)}</span>
       ${info?.model ? `<span class="k">model</span><span class="v">${escapeHtml(info.model)}</span>` : ''}
-      ${info?.ip ? `<span class="k">ip</span><span class="v">${escapeHtml(info.ip)}</span>` : ''}
+      ${info?.ip ? `<span class="k">ip</span><span class="v">${escapeHtml(maskIp(info.ip))}</span>` : ''}
       <span class="k">firmware</span><span class="v">${escapeHtml(fw)}${fwUpgrade}</span>
       <span class="k">uptime</span><span class="v">${uptime}</span>
       <span class="k">${t('ap.clients')}</span><span class="v">${clientsHere.length}</span>
