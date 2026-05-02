@@ -22,3 +22,6 @@ yarn-error.log*
 .cache/
 .tmp/
 *.local
+data.db
+data.db-wal
+data.db-shm

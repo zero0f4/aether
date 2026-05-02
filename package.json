@@ -33,10 +33,11 @@
     "url": "https://github.com/zero0f4/wifi-pulse/issues"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "ws": "^8.18.0",
+    "better-sqlite3": "^12.9.0",
     "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.4.1",
     "undici": "^6.19.8",
-    "express-rate-limit": "^8.4.1"
+    "ws": "^8.18.0"
   }
 }

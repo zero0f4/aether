@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { WebSocketServer } = require('ws');
 const { Agent, fetch: undiciFetch } = require('undici');
+const db = require('./db');
 
 // ─── Single-instance lock — voorkomt cookie-kaping door stale processen ───
 const PIDFILE = path.join(os.tmpdir(), 'wifi-pulse.pid');
@@ -215,6 +216,7 @@ function shape(clients) {
       ap: c.ap_mac,
       ssid: c.essid,
       band: c.radio_proto || c.radio,
+      radio: c.radio || null,    // 'ng' | 'na' | '6e' — eenduidig voor band-classificatie
       channel: c.channel,
       oui: c.oui || null,
       os: c.os_name || c.os || null,
@@ -452,6 +454,23 @@ app.post('/api/site', express.json(), (req, res) => {
   res.json({ ok: true, site: ACTIVE_SITE });
 });
 
+// ─── Trends / history ───
+// Schrijft elke ~60s een snapshot weg (los van de POLL_MS-frequentie voor de WS).
+// Endpoints onder /api/trends/* leveren tijdseries voor charts/sparklines.
+app.get('/api/trends/radio', (req, res) => {
+  if (!db.isReady()) return res.json({ ok:false, error:'history-disabled', hint:'npm install (better-sqlite3 ontbreekt)' });
+  const { ap, band, hours } = req.query;
+  res.json({ ok:true, rows: db.radioTrend({ ap, band, hours: Number(hours)||24 }) });
+});
+app.get('/api/trends/bands', (req, res) => {
+  if (!db.isReady()) return res.json({ ok:false, error:'history-disabled' });
+  res.json({ ok:true, rows: db.bandTrend({ hours: Number(req.query.hours)||24 }) });
+});
+app.get('/api/trends/bands/now', (_, res) => {
+  if (!db.isReady()) return res.json({ ok:false, error:'history-disabled' });
+  res.json({ ok:true, latest: db.bandLatest() });
+});
+
 app.post('/api/speedtest', async (_, res) => {
   try {
     const r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/cmd/devmgr`, {
@@ -508,4 +527,16 @@ server.listen(PORT, () => {
   }
   login().catch(e => console.error('[login]', e.message));
   setInterval(tick, Number(POLL_MS));
+
+  // History-store: snapshot elke 60s, prune elke uur
+  const histOK = db.init();
+  if (histOK) {
+    setInterval(() => {
+      try { db.writeSnapshot(lastPayload.apChannels, lastPayload.devices); }
+      catch (e) { console.error('[db] snapshot:', e.message); }
+    }, 60_000);
+    setInterval(() => db.pruneOld(), 3600_000);
+    // Eerste snapshot na 5s zodat lastPayload gevuld is
+    setTimeout(() => db.writeSnapshot(lastPayload.apChannels, lastPayload.devices), 5_000);
+  }
 });
