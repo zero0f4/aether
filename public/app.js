@@ -2887,7 +2887,7 @@ function connect() {
 }
 connect();
 
-const radTopo = document.getElementById('rad-topo');
+const radTopo = null; // verwijderd in v0.6.0
 const radAp = document.getElementById('rad-ap');
 const radBand = document.getElementById('rad-band');
 const radWan = document.getElementById('rad-wan');
@@ -3289,7 +3289,7 @@ function drawTopologyRadar() {
 
 function refreshStatsPage() {
   if (prefs.tab !== 'stats') return;
-  drawTopologyRadar();
+  // drawTopologyRadar(); // verwijderd v0.6.0
   drawApRadar();
   drawBandSplit();
   drawSparkline(radWan, wanRxHistory, wanTxHistory, 'kb/s');
@@ -3299,7 +3299,7 @@ function refreshStatsPage() {
   refreshEventLog();
 }
 function statsTopoLoop() {
-  try { if (prefs.tab === 'stats') drawTopologyRadar(); } catch (e) { console.error('topo:', e); }
+  // topology-radar verwijderd v0.6.0
   requestAnimationFrame(statsTopoLoop);
 }
 requestAnimationFrame(statsTopoLoop);
