@@ -138,6 +138,7 @@ async function enrichGeo(events, max = 30) {
   const subset = events.slice(0, max);
   const queue = [...subset];
   await Promise.all(queue.map(async e => {
+    if (e.demo || e.geo) return;  // demo-events hebben al hard-coded geo
     if (e.srcIp && !isPrivateIp(e.srcIp)) {
       const g = await geoLookup(e.srcIp);
       if (g) { e.geo = g; e.country = g.country; e.lat = g.lat; e.lon = g.lon; }

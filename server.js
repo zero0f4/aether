@@ -10,6 +10,7 @@ const db = require('./db');
 const intel = require('./intel');
 intel.loadOui();
 const advisor = require('./advisor');
+const firewall = require('./firewall');
 
 // ─── Single-instance lock — voorkomt cookie-kaping door stale processen ───
 const PIDFILE = path.join(os.tmpdir(), 'aether.pid');
@@ -683,6 +684,55 @@ app.get('/api/intel/cve/aps', async (_, res) => {
   const merged = devices.length ? devices : fromCh;
   const r = await intel.cveLookupAll(merged);
   res.json({ ok:true, results: r, scanned: merged.length });
+});
+
+// ─── Firewall — IPS-events, regels, geo-locatie ───
+let _demoTimer = null;
+app.get('/api/firewall/state', async (_, res) => {
+  try {
+    // Pull events vanuit alarm-list (vereist Threat Management aan in UDM)
+    await firewall.pollAlarms(unifiFetch, ACTIVE_SITE);
+    const rules = await firewall.getFirewallRules(unifiFetch, ACTIVE_SITE);
+    const pforw = await firewall.getPortForwards(unifiFetch, ACTIVE_SITE);
+    const events = firewall.getRecentEvents({ limit: 200 });
+    await firewall.enrichGeo(events, 50);
+    // Home: geo van WAN-IP zodat we arcs kunnen tekenen
+    let home = null;
+    if (lastPayload.wan?.ip) {
+      const g = await firewall.geoLookup(lastPayload.wan.ip);
+      if (g) home = { lat: g.lat, lon: g.lon, ip: lastPayload.wan.ip, country: g.country, city: g.city, isp: g.isp };
+    }
+    // Stats
+    const stats = { total: events.length, perSeverity: {}, perCountry: {}, perCategory: {} };
+    for (const e of events) {
+      stats.perSeverity[e.severity] = (stats.perSeverity[e.severity]||0) + 1;
+      const c = e.country || (e.geo && e.geo.country) || '?';
+      stats.perCountry[c] = (stats.perCountry[c]||0) + 1;
+      stats.perCategory[e.category] = (stats.perCategory[e.category]||0) + 1;
+    }
+    res.json({ ok:true, home, events, rules, portForwards: pforw, stats, demoActive: !!_demoTimer });
+  } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
+});
+
+// Demo-mode: genereert plausibele attacks elke 2-4 sec, voor visualisatie zonder Threat Management
+app.post('/api/firewall/demo', express.json(), (req, res) => {
+  const action = (req.body?.action || '').toLowerCase();
+  if (action === 'start') {
+    if (_demoTimer) return res.json({ ok:true, demoActive:true });
+    const tick = () => {
+      firewall.pushDemoEvent();
+      _demoTimer = setTimeout(tick, 2000 + Math.random() * 3000);
+    };
+    tick();
+    return res.json({ ok:true, demoActive:true });
+  }
+  if (action === 'stop') {
+    if (_demoTimer) clearTimeout(_demoTimer);
+    _demoTimer = null;
+    firewall.clearDemoEvents();
+    return res.json({ ok:true, demoActive:false });
+  }
+  res.status(400).json({ ok:false, error:'action must be start or stop' });
 });
 
 // ─── Advisor — RF & config-aanbevelingen ───
