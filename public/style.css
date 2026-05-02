@@ -469,6 +469,8 @@ footer.bottom-left {
 }
 
 .bottom-strip {
+  /* Default verborgen — alleen zichtbaar in spectrum-tab. */
+  display: none;
   position: fixed;
   left: 50%; bottom: 12px;
   transform: translateX(-50%);
@@ -479,6 +481,7 @@ footer.bottom-left {
   max-width: calc(100vw - 40px);
   overflow: visible;
 }
+body.spectrum-mode .bottom-strip { display: block; }
 .strip-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; gap: 18px; }
 .strip-title {
   font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
