@@ -975,10 +975,53 @@ function refreshReconPage() {
   }
   extEl.innerHTML = extHtml || '<tr><td colspan="8" style="color:var(--fg-faint);text-align:center;padding:14px">geen externe APs gevonden</td></tr>';
 
+  // ── Clients ──
+  const cliEl = document.getElementById('recon-cli-rows');
+  const cli = [...stations.values()];
+  // sort: by AP, then RSSI desc
+  cli.sort((a,b) => {
+    const an = (a.apName || a.ap || '').localeCompare(b.apName || b.ap || '');
+    if (an !== 0) return an;
+    return (b.rssi||-999) - (a.rssi||-999);
+  });
+  let cliHtml = '', cliShown = 0;
+  for (const c of cli) {
+    const band = bandFromRadio(c.radio || c.band);
+    if (bandF && band !== bandF) continue;
+    if (onlyDist) continue;  // bestaat alleen voor neighbors
+    if (search) {
+      const blob = ((c.name||'') + ' ' + (c.id||'') + ' ' + (c.ssid||'') + ' ' + (c.os||'') + ' ' + (c.oui||'')).toLowerCase();
+      if (!blob.includes(search)) continue;
+    }
+    cliShown++;
+    const apN = c.apName || (apsMap.get(c.ap)?.name) || (c.ap ? c.ap.slice(-5) : '—');
+    const rssiPct = Math.max(5, Math.min(100, ((c.rssi||-90) + 90) * 1.4));
+    const rssiCls = c.rssi >= -60 ? 'ok' : c.rssi >= -72 ? '' : 'warn';
+    const fmtRate = (r) => r ? (r >= 1000 ? (r/1000).toFixed(1)+'M' : r+'k') : '—';
+    const fmtKbps = (b) => b ? Math.round(b/1024) : 0;
+    if (cliShown > 500) break;  // safety cap
+    cliHtml += `<tr>
+      <td>${(c.name||'(onbekend)').replace(/</g,'&lt;')}${c.subrouter?' <span class="badge dist" style="margin-left:4px">subrouter</span>':''}</td>
+      <td style="font-family:var(--mono);color:var(--fg-dim)">${c.id || '—'}</td>
+      <td>${(c.os||c.family||c.oui||'').toString().slice(0,28)}</td>
+      <td>${apN}</td>
+      <td>${(c.ssid||'').replace(/</g,'&lt;')}</td>
+      <td>${band} GHz</td>
+      <td class="r">${c.channel ?? '—'}</td>
+      <td class="r"><span class="rssi-bar" style="--rssi-pct:${rssiPct}%"></span><span class="v ${rssiCls}">${c.rssi ?? '—'} dBm</span></td>
+      <td class="r">${fmtRate(c.tx)}</td>
+      <td class="r">${fmtRate(c.rx)}</td>
+      <td class="r">${fmtKbps(c.rxBytes)}</td>
+      <td class="r">${fmtKbps(c.txBytes)}</td>
+    </tr>`;
+  }
+  cliEl.innerHTML = cliHtml || '<tr><td colspan="12" style="color:var(--fg-faint);text-align:center;padding:14px">geen clients gevonden</td></tr>';
+
   // ── Counters ──
   document.getElementById('recon-count-own').textContent = own.length;
   document.getElementById('recon-count-ext').textContent = ext.length;
   document.getElementById('recon-count-dist').textContent = distCount;
+  document.getElementById('recon-count-cli').textContent = cli.length;
 }
 
 // Re-render bij filter-wijziging

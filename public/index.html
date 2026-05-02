@@ -153,9 +153,10 @@
     <div class="recon-head">
       <h2 class="recon-title">RECON · alle APs in zicht</h2>
       <div class="recon-meta">
-        <span><b id="recon-count-own">—</b> eigen</span>
+        <span><b id="recon-count-own">—</b> eigen APs</span>
         <span><b id="recon-count-ext">—</b> extern</span>
         <span><b id="recon-count-dist">—</b> storend</span>
+        <span><b id="recon-count-cli">—</b> clients</span>
       </div>
       <div class="recon-controls">
         <input type="search" id="recon-search" placeholder="🔍 zoek SSID / BSSID / kanaal" autocomplete="off">
@@ -191,6 +192,31 @@
               </tr>
             </thead>
             <tbody id="recon-ext-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="recon-section">
+        <h3>CLIENTS · alle wireless clients</h3>
+        <div class="recon-table-wrap">
+          <table class="recon-table">
+            <thead>
+              <tr>
+                <th>Naam / hostname</th>
+                <th>MAC</th>
+                <th>OS / fabrikant</th>
+                <th>AP</th>
+                <th>SSID</th>
+                <th>Band</th>
+                <th class="r">Kanaal</th>
+                <th class="r">RSSI</th>
+                <th class="r">TX rate</th>
+                <th class="r">RX rate</th>
+                <th class="r">↓ kb/s</th>
+                <th class="r">↑ kb/s</th>
+              </tr>
+            </thead>
+            <tbody id="recon-cli-rows"></tbody>
           </table>
         </div>
       </section>
