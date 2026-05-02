@@ -78,6 +78,10 @@ html, body {
   font-feature-settings: "tnum", "ss01";
   -webkit-font-smoothing: antialiased;
 }
+/* Sub-pages mogen wél scrollen (lange tabellen / lijsten) */
+body.recon-mode,
+body.stats-mode,
+body.alerts-mode { overflow-y: auto !important; overflow-x: hidden; }
 
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 

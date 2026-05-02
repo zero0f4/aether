@@ -888,9 +888,22 @@ function refreshReconPage() {
   const onlyDist = document.getElementById('recon-only-disturbing')?.checked || false;
   const onlyOwn  = document.getElementById('recon-only-own')?.checked || false;
 
-  // ── Own APs ──
-  const own = [...apsMap.values()];
+  // ── Own APs (uit apChannels: heeft firmware/IP/uptime; apsMap heeft alleen visualisatie-state) ──
   const channelsByMac = (typeof apChannels === 'object' && apChannels) ? apChannels : {};
+  const own = Object.entries(channelsByMac).map(([mac, ch]) => {
+    const visual = apsMap.get(mac) || {};
+    return {
+      mac,
+      name: ch.name || visual.name || mac,
+      model: ch.model || visual.model || null,
+      ip: ch.ip || visual.ip || null,
+      firmware: ch.firmware || visual.firmware || null,
+      firmwareLatest: ch.firmwareLatest || visual.firmwareLatest || null,
+      uptime: ch.uptime ?? visual.uptime ?? null,
+      clientCount: ch.clientCount ?? visual.clientCount ?? null,
+      state: ch.state ?? visual.state,
+    };
+  });
   let ownHtml = '';
   let ownShown = 0;
   for (const ap of own) {
@@ -994,7 +1007,7 @@ function refreshReconPage() {
       if (!blob.includes(search)) continue;
     }
     cliShown++;
-    const apN = c.apName || (apsMap.get(c.ap)?.name) || (c.ap ? c.ap.slice(-5) : '—');
+    const apN = (channelsByMac[c.ap]?.name) || c.apName || (apsMap.get(c.ap)?.name) || (c.ap ? c.ap.slice(-5) : '—');
     const rssiPct = Math.max(5, Math.min(100, ((c.rssi||-90) + 90) * 1.4));
     const rssiCls = c.rssi >= -60 ? 'ok' : c.rssi >= -72 ? '' : 'warn';
     const fmtRate = (r) => r ? (r >= 1000 ? (r/1000).toFixed(1)+'M' : r+'k') : '—';
