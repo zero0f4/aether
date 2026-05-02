@@ -211,6 +211,57 @@ body.stats-mode .bottom-left,
 body.stats-mode .top-right { display: none; }
 body.stats-mode #stage { opacity: 0.05; }
 
+/* SPECTRUM mode: alleen de spectrum-strip groot in beeld */
+body.spectrum-mode .bottom-left,
+body.spectrum-mode .top-right { display: none; }
+body.spectrum-mode #stage { opacity: 0.04; }
+body.spectrum-mode .bottom-strip {
+  position: fixed;
+  left: 50%;
+  top: 90px;
+  bottom: 30px;
+  transform: translateX(-50%);
+  width: min(1800px, calc(100vw - 80px));
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8,12,16,0.72);
+  border: 1px solid rgba(184,255,208,0.18);
+  border-radius: 18px;
+  padding: 28px 36px;
+  backdrop-filter: blur(10px);
+}
+body.spectrum-mode .strip-head {
+  margin-bottom: 18px;
+}
+body.spectrum-mode .strip-title {
+  font-size: 14px;
+  letter-spacing: 0.3em;
+}
+body.spectrum-mode .spectrum-row {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+body.spectrum-mode .spectrum-panel {
+  width: 100%;
+  min-width: 0;
+}
+body.spectrum-mode .spectrum-panel:first-child { flex: 1.2; }
+body.spectrum-mode .spectrum-panel:last-child  { flex: 1; }
+body.spectrum-mode .panel-label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  margin-bottom: 12px;
+  color: rgba(184,255,208,0.65);
+}
+body.spectrum-mode .spectrum-panel canvas {
+  width: 100% !important;
+  height: auto !important;
+  max-height: calc(100vh - 240px);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

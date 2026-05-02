@@ -129,6 +129,7 @@ function shapeApChannels(devices) {
       });
     }
     if (channels.length) {
+      const up = d.uplink || {};
       out[d.mac] = {
         name: d.name || d.model || d.mac,
         channels,
@@ -142,6 +143,15 @@ function shapeApChannels(devices) {
         ip: d.ip || null,
         adopted: d.adopted ?? null,
         state: d.state ?? null,
+        uplink: {
+          type: up.type || null,                 // 'wire' | 'wireless'
+          parentMac: up.uplink_mac || up.uplink_remote_mac || up.ap_mac || null,
+          parentName: up.uplink_device_name || null,
+          radio: up.radio || null,               // 'ng' | 'na' (5GHz)
+          rssi: up.rssi ?? null,
+          signal: up.signal ?? null,
+          channel: up.channel ?? null,
+        },
       };
     }
   }
@@ -171,6 +181,24 @@ async function getWan() {
   };
 }
 
+// OUIs van consumer routers/AP brands die hun eigen WiFi uitstralen
+// als je ze als client aan je Unifi-netwerk hangt.
+const SUBROUTER_OUI_RE = /\b(google|tp-link|netgear|asus|linksys|eero|d-link|tenda|xiaomi router|huawei device|amplifi|belkin|netcomm|ubiquiti router)\b/i;
+// Hostname patterns die suggereren dat 't een AP/router is.
+const SUBROUTER_NAME_RE = /(accesspoint|access[ -_]?point|nest[ -_]?wifi|google[ -_]?wifi|deco|orbi|eero|amplifi|router|mesh|\bap[0-9])/i;
+
+function isSubrouter(c) {
+  const name = (c.name || c.hostname || '').toLowerCase();
+  const oui = (c.oui || '').toLowerCase();
+  // Naam moet routerachtig zijn — strikte match. (Geen bps-heuristiek meer,
+  // gaf false positives bij iPads die tijdelijk veel uploaden.)
+  if (!SUBROUTER_NAME_RE.test(name)) return false;
+  // Combineer met OUI-match voor zekerheid, of accepteer als de naam zeer expliciet is.
+  if (SUBROUTER_OUI_RE.test(oui)) return true;
+  if (/(accesspoint|access[ -_]?point|nest[ -_]?wifi|google[ -_]?wifi|deco|orbi|eero|amplifi)/i.test(name)) return true;
+  return false;
+}
+
 function shape(clients) {
   return clients
     .filter(c => c.is_wired === false)
@@ -191,6 +219,7 @@ function shape(clients) {
       oui: c.oui || null,
       os: c.os_name || c.os || null,
       family: c.dev_family || c.dev_cat || null,
+      subrouter: isSubrouter(c),
     }));
 }
 
@@ -329,6 +358,84 @@ app.post('/api/setup/save', express.json(), async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/health', (_, res) => res.json({ ok: true, host: UDM_HOST, site: ACTIVE_SITE }));
+
+app.get('/api/diag/find-client', async (req, res) => {
+  try {
+    const q = (req.query.q || '').toLowerCase();
+    let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/sta`);
+    if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/sta`); }
+    if (!r.ok) return res.status(500).json({ ok: false, status: r.status });
+    const j = await r.json();
+    const clients = (j.data || []).filter(c => {
+      const blob = (c.hostname + ' ' + c.name + ' ' + (c.note||'') + ' ' + c.mac + ' ' + c.oui).toLowerCase();
+      return !q || blob.includes(q);
+    }).map(c => ({
+      mac: c.mac, hostname: c.hostname, name: c.name, ip: c.ip,
+      ap_mac: c.ap_mac, ssid: c.essid, channel: c.channel, radio: c.radio,
+      rssi: c.rssi, signal: c.signal, oui: c.oui,
+      tx_bytes: c.tx_bytes, rx_bytes: c.rx_bytes,
+      uptime: c.uptime, is_wired: c.is_wired,
+      first_seen: c.first_seen, last_seen: c.last_seen,
+    }));
+    res.json({ ok: true, count: clients.length, clients });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/api/diag/payload', (_, res) => res.json({
+  ts: lastPayload.ts,
+  apChannelsKeys: Object.keys(lastPayload.apChannels || {}),
+  apChannels: lastPayload.apChannels,
+  subrouters: (lastPayload.devices || []).filter(d => d.subrouter)
+              .map(d => ({ name: d.name, mac: d.id, oui: d.oui, ap: d.ap })),
+  totalDevices: (lastPayload.devices || []).length,
+}));
+
+// Diag: raw uplink/mesh data per AP (wired vs wireless uplink, parent_mac, etc.)
+app.get('/api/diag/uplinks', async (_, res) => {
+  try {
+    let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/device`);
+    if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/device`); }
+    if (!r.ok) return res.status(500).json({ ok: false, status: r.status });
+    const j = await r.json();
+    const out = (j.data || []).map(d => ({
+      mac: d.mac, name: d.name, type: d.type, model: d.model, ip: d.ip, state: d.state,
+      uplink_type: d.uplink && d.uplink.type, // wire | wireless
+      uplink_full_duplex: d.uplink && d.uplink.full_duplex,
+      uplink_speed: d.uplink && d.uplink.speed,
+      uplink_remote_mac: d.uplink && (d.uplink.uplink_remote_mac || d.uplink.uplink_mac || d.uplink.gateway_mac),
+      uplink_port_mac: d.uplink && d.uplink.port_mac,
+      uplink_radio: d.uplink && d.uplink.radio,
+      uplink_full: d.uplink || null,
+    }));
+    res.json({ ok: true, devices: out });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Diag: alle UDM-devices ongefilterd + samenvatting van wat het filter zou doen
+app.get('/api/diag/devices', async (_, res) => {
+  try {
+    let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/device`);
+    if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/device`); }
+    if (!r.ok) return res.status(500).json({ ok: false, status: r.status });
+    const j = await r.json();
+    const devices = j.data || [];
+    const summary = devices.map(d => ({
+      mac: d.mac, name: d.name, type: d.type, model: d.model, model_in_lts: d.model_in_lts,
+      adopted: d.adopted, state: d.state, ip: d.ip, disabled: d.disabled,
+      has_radio_table: !!d.radio_table, has_radio_table_stats: !!d.radio_table_stats,
+      radio_count: (d.radio_table_stats || d.radio_table || []).length,
+      passes_filter: (d.type === 'uap' || d.type === 'udm' || !!(d.radio_table_stats || d.radio_table)),
+      num_sta: d.num_sta,
+      uptime: d.uptime,
+      radios: (d.radio_table_stats || d.radio_table || []).map(r => ({
+        name: r.name, radio: r.radio, channel: r.channel, user_channel: r.user_channel,
+        tx_power: r.tx_power, ht: r.ht, state: r.state,
+        cu_total: r.cu_total, n_users: r.user_num_sta,
+      })),
+    }));
+    res.json({ ok: true, total: devices.length, summary });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 
 app.get('/api/sites', async (_, res) => {
   try {

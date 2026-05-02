@@ -372,8 +372,30 @@ function setTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.body.classList.toggle('stats-mode', tab === 'stats');
   document.body.classList.toggle('alerts-mode', tab === 'alerts');
+  document.body.classList.toggle('spectrum-mode', tab === 'spectrum');
   if (tab === 'alerts') refreshAlertsPage();
+  if (tab === 'spectrum') resizeSpectrumCanvases();
 }
+
+// Maak de spectrum-canvases breder als we in fullscreen-mode staan
+function resizeSpectrumCanvases() {
+  const c24 = document.getElementById('spec24');
+  const c5 = document.getElementById('spec5');
+  if (!c24 || !c5) return;
+  const isFullscreen = document.body.classList.contains('spectrum-mode');
+  if (isFullscreen) {
+    const W = Math.max(900, Math.min(window.innerWidth - 160, 1800));
+    // beide full-width gestapeld
+    c24.width = W; c24.height = 360;
+    c5.width  = W; c5.height  = 300;
+  } else {
+    c24.width = 540; c24.height = 160;
+    c5.width  = 700; c5.height  = 160;
+  }
+}
+window.addEventListener('resize', () => {
+  if (document.body.classList.contains('spectrum-mode')) resizeSpectrumCanvases();
+});
 document.querySelectorAll('.tab-btn').forEach(b => {
   b.addEventListener('click', () => setTab(b.dataset.tab));
 });
@@ -1300,6 +1322,7 @@ class Station {
     this.os = d.os;
     this.oui = d.oui;
     this.family = d.family;
+    this.subrouter = !!d.subrouter;
     if (this.phase === undefined) {
       this.phase = Math.random() * Math.PI * 2;
       this.angVel = (Math.random() - 0.5) * 0.05;
@@ -1359,7 +1382,16 @@ function layout() {
     groups.get(s.ap).push(s);
   }
   for (const mac of groups.keys()) if (!apsMap.has(mac)) apsMap.set(mac, new AP(mac));
-  for (const mac of [...apsMap.keys()]) if (!groups.has(mac)) apsMap.delete(mac);
+  // Ook AP's zonder clients tonen — ze staan wel in apChannels (UDM rapporteert ze).
+  // Skip 'unknown' bucket en eigen UDM mac (die heeft eigen UDM-node).
+  for (const mac of Object.keys(apChannels)) {
+    if (mac === 'unknown') continue;
+    if (mac === udm.mac) continue;
+    if (!apsMap.has(mac)) apsMap.set(mac, new AP(mac));
+  }
+  for (const mac of [...apsMap.keys()]) {
+    if (!groups.has(mac) && !apChannels[mac]) apsMap.delete(mac);
+  }
 
   const apList = [...apsMap.values()];
   const cx = W / 2, cy = H / 2;
@@ -1611,13 +1643,55 @@ function drawParticleStream(p0, p1, particles, baseBow) {
   }
 }
 
+function drawHairline(ax, ay, bx, by, color, dashed = false) {
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const bow = 0.06;
+  const mx = (ax + bx) / 2 + (-dy / len) * len * bow;
+  const my = (ay + by) / 2 + (dx / len) * len * bow;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.6;
+  if (dashed) ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.quadraticCurveTo(mx, my, bx, by);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawWanLine() {
+  drawHairline(wan.x, wan.y, udm.x, udm.y, 'rgba(184,255,208,0.28)');
+}
+
+function drawMeshLines() {
+  // Voor elke AP die wireless-meshed is, lijn van parent AP → deze AP.
+  // Dashed zodat je ziet dat het een wireless mesh-hop is (i.p.v. wired).
+  for (const [mac, info] of Object.entries(apChannels)) {
+    const up = info.uplink;
+    if (!up || up.type !== 'wireless' || !up.parentMac) continue;
+    const child = apsMap.get(mac);
+    const parent = apsMap.get(up.parentMac);
+    if (!child || !parent) continue;
+    drawHairline(parent.x, parent.y, child.x, child.y,
+                 'rgba(255,200,140,0.35)', /*dashed=*/true);
+  }
+}
+
 function drawStreams() {
   ctx.globalCompositeOperation = 'lighter';
   if (prefs.showWanStream) {
-    drawParticleStream(wan, udm, wan.particles, 0.06);
+    drawWanLine();
   }
+  drawMeshLines();
   if (prefs.showUdmStream) {
     for (const ap of apsMap.values()) {
+      // Skip particles voor wireless-meshed APs — die hebben hun mesh-lijn al
+      const info = apChannels[ap.mac];
+      if (info && info.uplink && info.uplink.type === 'wireless') continue;
       drawParticleStream(udm, ap, ap.particles, 0.08);
       for (const p of ap.particles) {
         if (p.t > 0.96 && p.t < 1.02) {
@@ -1878,10 +1952,37 @@ function drawStations() {
       ctx.arc(s.x, s.y, 9 + (1 - s.anomalyFlash) * 12, 0, Math.PI * 2);
       ctx.stroke();
     }
-    // Band-kleur: 2.4=dof mint, 5=primair, 6=helderst
+    // Subrouter (Google/Eero/Deco-achtig device als WiFi-client) krijgt
+    // duidelijk paarse marker zodat 't opvalt — zelfde rendering als eigen AP-stijl
+    if (s.subrouter) {
+      // Glow halo
+      ctx.fillStyle = `rgba(180,140,255,${0.30 * a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      // Solid core
+      ctx.fillStyle = `rgba(180,140,255,${0.95 * a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // Ring rondom (signature: ≠ gewone client)
+      ctx.strokeStyle = `rgba(220,200,255,${0.95 * a})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      // Label er altijd onder zodat je weet wélke subrouter
+      if (prefs.showLabels !== false) {
+        ctx.fillStyle = `rgba(220,200,255,${0.9 * a})`;
+        ctx.font = '600 10px ui-monospace, "SF Mono", Menlo, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(s.name || s.id.slice(-5), s.x, s.y + 18);
+      }
+      continue; // geen normale band-rendering eroverheen
+    }
+    // Band-kleur voor reguliere clients
     const bc = BAND_COLOR[s.bandKey] || BAND_COLOR['5'];
     const alpha = (0.55 + s.strength * 0.3 + g * 0.2) * a;
-    // Glow halo voor sterkere clients zodat band-kleur leesbaar is
     if (s.strength > 0.4 && matches) {
       ctx.fillStyle = bc.glow.replace(/[\d.]+\)$/, (alpha * 0.35) + ')');
       ctx.beginPath();
@@ -2194,6 +2295,18 @@ function drawSpec24() {
   const order = { passive: 0, disturbing: 1, own: 2 };
   bells.sort((a, b) => order[a.kind] - order[b.kind]);
 
+  // Geef elk label binnen hetzelfde kanaal een unieke stack-index
+  // zodat labels niet overlappen. Eigen AP's krijgen index 0 (dichtst bij top).
+  const stackByCh = new Map();
+  // Bouw eerst per kanaal in display-volgorde: own → disturbing → passive
+  const orderedForLabels = [...bells].sort((a, b) => order[b.kind] - order[a.kind]); // own first
+  for (const b of orderedForLabels) {
+    const key = b.ch;
+    const idx = stackByCh.get(key) || 0;
+    b.stackIdx = idx;
+    stackByCh.set(key, idx + 1);
+  }
+
   const baseY = h - padB;
   const hwMhz = 11;
   const pxPerCh = (w - padL - padR) / 16;
@@ -2259,7 +2372,10 @@ function drawSpec24() {
       c.font = (b.kind === 'own' ? '600 ' : '') + '9px ui-monospace, monospace';
       c.textAlign = 'center';
       const label = (b.label || '').slice(0, 14);
-      c.fillText(label, cx, Math.max(padT + 9, cy - 4));
+      // Stack: own boven (kleinste idx → dichtst bij top), volgende eronder
+      const stackOffset = (b.stackIdx || 0) * 12;
+      const labelY = Math.max(padT + 9, cy - 4 - stackOffset);
+      c.fillText(label, cx, labelY);
     }
     spec24Hits.push({ x: cx, y: cy, halfPx, baseY, item: b });
   }
@@ -2306,11 +2422,32 @@ function drawSpec5() {
   }
 
   spec5Hits.length = 0;
+  // Verzamel alles + stack-index per kanaal (own first, dan disturbing).
+  const items = [];
   for (const [mac, info] of Object.entries(apChannels)) {
     for (const r of info.channels || []) {
       if (r.band !== 'na') continue;
-      const x = spec5X(r.channel, w, padL, padR);
-      if (x < 0) continue;
+      items.push({ ch: r.channel, kind: 'own', label: info.name, radio: r, mac });
+    }
+  }
+  for (const n of neighbors.values()) {
+    if (n.band !== 'na' || !n.channel) continue;
+    items.push({ ch: n.channel, kind: n.disturbing ? 'disturbing' : 'passive',
+                 label: n.ssid, dbm: dbmFromRssi(n.rssi), n });
+  }
+  const ord5 = { own: 0, disturbing: 1, passive: 2 };
+  items.sort((a, b) => ord5[a.kind] - ord5[b.kind] || a.ch - b.ch);
+  const stack5 = new Map();
+  for (const it of items) {
+    const idx = stack5.get(it.ch) || 0;
+    it.stackIdx = idx;
+    stack5.set(it.ch, idx + 1);
+  }
+
+  for (const it of items) {
+    const x = spec5X(it.ch, w, padL, padR);
+    if (x < 0) continue;
+    if (it.kind === 'own') {
       c.strokeStyle = 'rgba(184,255,208,0.35)';
       c.lineWidth = 1.2;
       c.beginPath(); c.moveTo(x, padT); c.lineTo(x, h - padB); c.stroke();
@@ -2323,28 +2460,28 @@ function drawSpec5() {
       c.fillStyle = 'rgba(220,255,235,1)';
       c.font = '600 9px ui-monospace, monospace';
       c.textAlign = 'center';
-      c.fillText(info.name.slice(0, 14), x, y - 8);
-      spec5Hits.push({ x, y, r: 9, item: { ch: r.channel, kind: 'own', label: info.name, radio: r, mac } });
-    }
-  }
-  for (const n of neighbors.values()) {
-    if (n.band !== 'na' || !n.channel) continue;
-    if (!n.disturbing) { /* passive: altijd in spectrum */ }
-    const x = spec5X(n.channel, w, padL, padR);
-    if (x < 0) continue;
-    const y = specY(dbmFromRssi(n.rssi), h, padT, padB);
-    if (n.disturbing) {
+      const labelY = Math.max(padT + 9, y - 8 - it.stackIdx * 12);
+      c.fillText((it.label || '').slice(0, 14), x, labelY);
+      spec5Hits.push({ x, y, r: 9, item: it });
+    } else if (it.kind === 'disturbing') {
+      const y = specY(it.dbm, h, padT, padB);
       c.fillStyle = 'rgba(255,160,110,0.9)';
       c.beginPath(); c.arc(x, y, 4, 0, Math.PI * 2); c.fill();
       c.fillStyle = 'rgba(255,200,170,0.8)';
       c.font = '8px ui-monospace, monospace';
       c.textAlign = 'left';
-      c.fillText((n.ssid || '').slice(0, 10), x + 6, y + 3);
+      // Wissel afwisselend links/rechts om overlap te voorkomen
+      const side = it.stackIdx % 2 === 0 ? 1 : -1;
+      const offX = side * 6;
+      c.textAlign = side === 1 ? 'left' : 'right';
+      c.fillText((it.label || '').slice(0, 10), x + offX, y + 3);
+      spec5Hits.push({ x, y, r: 6, item: it });
     } else {
+      const y = specY(it.dbm, h, padT, padB);
       c.fillStyle = 'rgba(170,180,200,0.5)';
       c.beginPath(); c.arc(x, y, 1.8, 0, Math.PI * 2); c.fill();
+      spec5Hits.push({ x, y, r: 6, item: it });
     }
-    spec5Hits.push({ x, y, r: 6, item: { ch: n.channel, kind: n.disturbing ? 'disturbing' : 'passive', label: n.ssid, n } });
   }
 }
 
