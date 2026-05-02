@@ -3,10 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>wifi-pulse — live unifi traffic</title>
+  <title>AETHER · Wireless Network Intelligence Console</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Beta-disclaimer — verbergbaar via localStorage 'aether-banner-dismissed' -->
+  <div id="beta-banner" class="beta-banner" style="display:none">
+    <span class="beta-tag">BETA</span>
+    <span>AETHER is in actieve ontwikkeling — bugs en breaking changes mogelijk. Geen productie-gebruik.</span>
+    <button class="beta-close" onclick="document.getElementById('beta-banner').style.display='none';localStorage.setItem('aether-banner-dismissed','1')" title="sluit">×</button>
+  </div>
+  <script>if (!localStorage.getItem('aether-banner-dismissed')) { const e=document.getElementById('beta-banner'); if(e) e.style.display='flex'; }</script>
   <canvas id="stage"></canvas>
   <div id="canvas-tip" class="canvas-tip"></div>
 
@@ -22,15 +29,17 @@
   <header class="top-left">
     <div class="brand">
       <span class="mark"></span>
-      <span class="title">WIFI · PULSE</span>
+      <span class="title">AETHER</span>
+      <span class="version" id="brand-version">v0.9</span>
     </div>
-    <div class="sub" data-i18n="brand.subtitle">live unifi network traffic</div>
+    <div class="sub" data-i18n="brand.subtitle">wireless network intelligence console</div>
     <nav class="tabs">
-      <button class="tab-btn active" data-tab="pulse" data-i18n="tab.pulse">PULSE</button>
-      <button class="tab-btn" data-tab="stats" data-i18n="tab.stats">STATS</button>
+      <button class="tab-btn active" data-tab="pulse">PULSE</button>
+      <button class="tab-btn" data-tab="intern">INTERN</button>
+      <button class="tab-btn" data-tab="extern">EXTERN</button>
       <button class="tab-btn" data-tab="spectrum">SPECTRUM</button>
-      <button class="tab-btn" data-tab="recon">RECON</button>
-      <button class="tab-btn alerts-tab" data-tab="alerts" data-i18n="tab.alerts">⚠ ALERTS<span class="alerts-badge" id="alerts-badge" style="display:none">0</span></button>
+      <button class="tab-btn" data-tab="advisor">ADVISOR</button>
+      <button class="tab-btn alerts-tab" data-tab="alerts">EVENTS<span class="alerts-badge" id="alerts-badge" style="display:none">0</span></button>
     </nav>
     <div class="lang-switch">
       <button class="lang-btn" data-lang="nl">NL</button>
@@ -96,104 +105,83 @@
     </details>
   </section>
 
-  <section class="stats-page" id="stats-page">
-    <button class="back-btn" id="back-to-pulse" title="terug naar Pulse (esc)">
-      <span class="back-arrow">‹</span>
-      <span class="back-label" data-i18n="tab.pulse">PULSE</span>
-    </button>
-    <div class="stats-grid">
-      <div class="card card-toptalkers">
-        <div class="card-head"><span data-i18n="card.topTalkers">TOP TALKERS</span></div>
-        <div class="card-body">
-          <table id="top-table">
-            <thead><tr><th data-i18n="top.station">station</th><th data-i18n="top.band">band</th><th class="r" data-i18n="top.rssi">rssi</th><th class="r" data-i18n="top.kbps">kb/s</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.apLoad">AP LOAD · RADAR</span></div>
-        <div class="card-body"><canvas id="rad-ap" width="300" height="240"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.bandSplit">BAND SPLIT</span></div>
-        <div class="card-body"><canvas id="rad-band" width="300" height="240"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.wanFlow">WAN FLOW · 60s</span></div>
-        <div class="card-body"><canvas id="rad-wan" width="380" height="160"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.latency">WAN LATENCY · 60s</span></div>
-        <div class="card-body"><canvas id="rad-lat" width="380" height="160"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.rssiDist">RSSI DISTRIBUTIE</span></div>
-        <div class="card-body"><canvas id="rad-rssi" width="320" height="180"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.channelOcc">KANAAL BEZETTING</span></div>
-        <div class="card-body"><canvas id="rad-cu" width="320" height="180"></canvas></div>
-      </div>
-      <div class="card card-handover">
-        <div class="card-head"><span data-i18n="card.handover">AP HANDOVER · MATRIX</span></div>
-        <div class="card-body"><div id="handover-matrix"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><span data-i18n="card.events">ROAMING EVENTS</span></div>
-        <div class="card-body"><div id="event-log" class="event-log"></div></div>
-      </div>
-    </div>
-  </section>
+  <!-- stats-page bestaat alleen nog als drager voor canvases (nu in intern/extern) -->
+  <section class="stats-page" id="stats-page" style="display:none"></section>
 
-  <section class="recon-page page" id="recon-page">
+  <!-- ─────────────────────────────────────────────────────────
+       INTERN — eigen netwerk: APs, clients, DNA, offline, stats
+       ───────────────────────────────────────────────────────── -->
+  <section class="recon-page page" id="intern-page">
     <button class="back-btn" onclick="setTab('pulse')" title="terug naar Pulse">
       <span class="back-arrow">‹</span><span class="back-label">PULSE</span>
     </button>
     <div class="page-head">
-      <h2 class="page-title">RECON · alles in zicht</h2>
+      <h2 class="page-title">INTERN · eigen netwerk</h2>
       <div class="page-meta">
         <span><b id="recon-count-own">—</b> eigen APs</span>
-        <span><b id="recon-count-ext">—</b> extern</span>
-        <span><b id="recon-count-dist">—</b> storend</span>
         <span><b id="recon-count-cli">—</b> clients</span>
       </div>
       <div class="toolbar">
-        <input type="search" id="recon-search" placeholder="🔍 zoek SSID / BSSID / kanaal / naam" autocomplete="off">
+        <input type="search" id="recon-search" placeholder="🔍 zoek naam / MAC / SSID" autocomplete="off">
         <select id="recon-band-filter">
           <option value="">alle banden</option>
           <option value="2.4">2.4 GHz</option>
           <option value="5">5 GHz</option>
           <option value="6">6 GHz</option>
         </select>
-        <label class="tag tag--btn"><input type="checkbox" id="recon-only-disturbing" style="margin-right:4px"> alleen storend</label>
-        <label class="tag tag--btn"><input type="checkbox" id="recon-only-own" style="margin-right:4px"> alleen eigen</label>
       </div>
     </div>
     <div class="recon-body">
       <section class="recon-section">
+        <h3>📊 KPIs · live performance</h3>
+        <div class="stats-grid">
+          <div class="card card-toptalkers">
+            <div class="card-head"><span>TOP TALKERS</span></div>
+            <div class="card-body">
+              <table id="top-table">
+                <thead><tr><th>station</th><th>band</th><th class="r">rssi</th><th class="r">kb/s</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>AP LOAD · RADAR</span></div>
+            <div class="card-body"><canvas id="rad-ap" width="300" height="240"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>BAND SPLIT</span></div>
+            <div class="card-body"><canvas id="rad-band" width="300" height="240"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>WAN FLOW · 60s</span></div>
+            <div class="card-body"><canvas id="rad-wan" width="380" height="160"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>WAN LATENCY · 60s</span></div>
+            <div class="card-body"><canvas id="rad-lat" width="380" height="160"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>RSSI DISTRIBUTIE</span></div>
+            <div class="card-body"><canvas id="rad-rssi" width="320" height="180"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>KANAAL BEZETTING</span></div>
+            <div class="card-body"><canvas id="rad-cu" width="320" height="180"></canvas></div>
+          </div>
+          <div class="card card-handover">
+            <div class="card-head"><span>AP HANDOVER · MATRIX</span></div>
+            <div class="card-body"><div id="handover-matrix"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span>ROAMING EVENTS</span></div>
+            <div class="card-body"><div id="event-log" class="event-log"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="recon-section">
         <h3>EIGEN APs</h3>
         <div class="recon-cards" id="recon-own-cards"></div>
-      </section>
-      <section class="recon-section">
-        <h3>EXTERNE APs (neighbors)</h3>
-        <div class="recon-table-wrap">
-          <table class="tbl recon-table">
-            <thead>
-              <tr>
-                <th>SSID</th>
-                <th>BSSID</th>
-                <th>Band</th>
-                <th class="r">Kanaal</th>
-                <th class="r">RSSI</th>
-                <th>Status</th>
-                <th>Gezien door</th>
-                <th class="r">Leeftijd</th>
-              </tr>
-            </thead>
-            <tbody id="recon-ext-rows"></tbody>
-          </table>
-        </div>
       </section>
 
       <section class="recon-section">
@@ -203,27 +191,7 @@
       </section>
 
       <section class="recon-section">
-        <h3>👻 OFFLINE clients · gezien in afgelopen 24u</h3>
-        <div class="recon-table-wrap">
-          <table class="tbl recon-table">
-            <thead>
-              <tr>
-                <th>Naam / hostname</th>
-                <th>MAC</th>
-                <th>Fabrikant</th>
-                <th>Laatste AP</th>
-                <th>Laatste SSID</th>
-                <th class="r">Laatste RSSI</th>
-                <th class="r">Laatst gezien</th>
-              </tr>
-            </thead>
-            <tbody id="recon-offline-rows"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="recon-section">
-        <h3>CLIENTS · alle wireless clients</h3>
+        <h3>CLIENTS · live verbonden</h3>
         <div class="recon-table-wrap">
           <table class="tbl recon-table">
             <thead>
@@ -245,6 +213,132 @@
             <tbody id="recon-cli-rows"></tbody>
           </table>
         </div>
+      </section>
+
+      <section class="recon-section">
+        <h3>👻 OFFLINE clients · gezien in afgelopen 24u</h3>
+        <div class="recon-table-wrap">
+          <table class="tbl recon-table">
+            <thead>
+              <tr>
+                <th>Naam / hostname</th>
+                <th>MAC</th>
+                <th>Fabrikant</th>
+                <th>Laatste AP</th>
+                <th>Laatste SSID</th>
+                <th class="r">Laatste RSSI</th>
+                <th class="r">Laatst gezien</th>
+              </tr>
+            </thead>
+            <tbody id="recon-offline-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────
+       EXTERN — buurt + WAN: WAN-intel, neighbors, transient, WiGLE
+       ───────────────────────────────────────────────────────── -->
+  <section class="recon-page page" id="extern-page">
+    <button class="back-btn" onclick="setTab('pulse')" title="terug naar Pulse">
+      <span class="back-arrow">‹</span><span class="back-label">PULSE</span>
+    </button>
+    <div class="page-head">
+      <h2 class="page-title">EXTERN · buurt &amp; internet</h2>
+      <div class="page-meta">
+        <span><b id="recon-count-ext">—</b> externe APs</span>
+        <span><b id="recon-count-dist">—</b> storend</span>
+        <span><b id="recon-count-trans">—</b> transient</span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="extern-search" placeholder="🔍 zoek SSID / BSSID / kanaal / naam" autocomplete="off">
+        <select id="extern-band-filter">
+          <option value="">alle banden</option>
+          <option value="2.4">2.4 GHz</option>
+          <option value="5">5 GHz</option>
+          <option value="6">6 GHz</option>
+        </select>
+        <label class="tag tag--btn"><input type="checkbox" id="extern-only-disturbing" style="margin-right:4px"> alleen storend</label>
+      </div>
+    </div>
+    <div class="recon-body">
+      <section class="recon-section">
+        <h3>EXTERNE APs · buurt-netwerken (klik 🌐 voor WiGLE)</h3>
+        <div class="recon-table-wrap">
+          <table class="tbl recon-table">
+            <thead>
+              <tr>
+                <th>SSID</th>
+                <th>BSSID</th>
+                <th>Band</th>
+                <th class="r">Kanaal</th>
+                <th class="r">RSSI</th>
+                <th>Status</th>
+                <th>Gezien door</th>
+                <th class="r">Leeftijd</th>
+              </tr>
+            </thead>
+            <tbody id="recon-ext-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="recon-section">
+        <h3>👻 TRANSIENT stations · privacy-MACs / passanten / korte sessies</h3>
+        <div class="recon-note" style="margin: 0 0 14px 0">Privacy-MACs (locally-administered bit), onbekende fabrikanten, of clients die korter dan 5 min hebben verbonden — typisch passanten of probers.</div>
+        <div class="recon-table-wrap">
+          <table class="tbl recon-table">
+            <thead>
+              <tr>
+                <th>Naam / hostname</th>
+                <th>MAC</th>
+                <th>Indicatoren</th>
+                <th>Fabrikant</th>
+                <th>Laatste AP</th>
+                <th>SSID</th>
+                <th class="r">Sessie</th>
+                <th class="r">Laatst gezien</th>
+              </tr>
+            </thead>
+            <tbody id="recon-transient-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────
+       ADVISOR — analyse + concrete aanbevelingen
+       ───────────────────────────────────────────────────────── -->
+  <section class="recon-page page" id="advisor-page">
+    <div class="page-head">
+      <h2 class="page-title">ADVISOR · RF &amp; configuratie-aanbevelingen</h2>
+      <div class="page-meta">
+        <span><b id="advisor-score">—</b>/100 health-score</span>
+        <span><b id="advisor-crit">—</b> kritiek</span>
+        <span><b id="advisor-warn">—</b> waarschuwingen</span>
+        <span><b id="advisor-info">—</b> info</span>
+      </div>
+      <div class="toolbar">
+        <select id="advisor-filter">
+          <option value="">alle categorieën</option>
+          <option value="channel-plan">kanaalplan</option>
+          <option value="channel-width">kanaalbreedte</option>
+          <option value="dfs">DFS</option>
+          <option value="firmware">firmware</option>
+          <option value="mesh">mesh-uplink</option>
+          <option value="coverage">dekking</option>
+          <option value="band-steering">band-steering</option>
+          <option value="topology">topologie</option>
+          <option value="wan">WAN</option>
+        </select>
+        <button class="tag tag--btn" id="advisor-refresh" type="button">↻ herbereken</button>
+      </div>
+    </div>
+    <div class="recon-body">
+      <section class="recon-section" id="advisor-list-section">
+        <div id="advisor-list">laden…</div>
       </section>
     </div>
   </section>

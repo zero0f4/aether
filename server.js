@@ -7,6 +7,9 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { Agent, fetch: undiciFetch } = require('undici');
 const db = require('./db');
+const intel = require('./intel');
+intel.loadOui();
+const advisor = require('./advisor');
 
 // ─── Single-instance lock — voorkomt cookie-kaping door stale processen ───
 const PIDFILE = path.join(os.tmpdir(), 'wifi-pulse.pid');
@@ -308,7 +311,12 @@ app.get('/api/setup/current', (_, res) => {
     UDM_SITE: process.env.UDM_SITE || 'default',
     PORT: process.env.PORT || '3033',
     POLL_MS: process.env.POLL_MS || '1500',
-    hasPassword: !!process.env.UDM_PASS
+    WIGLE_USER: process.env.WIGLE_USER || '',
+    RETENTION_DAYS: process.env.RETENTION_DAYS || '7',
+    hasPassword: !!process.env.UDM_PASS,
+    hasWigleKey: !!process.env.WIGLE_KEY,
+    hasAuthToken: !!process.env.AUTH_TOKEN,
+    hasReadonlyToken: !!process.env.READONLY_TOKEN,
   });
 });
 
@@ -339,21 +347,45 @@ app.post('/api/setup/save', express.json(), async (req, res) => {
     if (process.env.UDM_PASS) v.UDM_PASS = process.env.UDM_PASS;
     else return res.status(400).json({ ok: false, error: 'wachtwoord verplicht bij eerste setup' });
   }
-  // Sanity-escape: geen newlines in waarden
+  // Optionele velden: behoud bestaande als leeg
+  const keep = (newVal, envKey) => {
+    if (newVal != null && newVal !== '') return newVal;
+    return process.env[envKey] || '';
+  };
+  const wigleUser = keep(v.WIGLE_USER, 'WIGLE_USER');
+  const wigleKey  = keep(v.WIGLE_KEY,  'WIGLE_KEY');
+  const authTok   = keep(v.AUTH_TOKEN, 'AUTH_TOKEN');
+  const roTok     = keep(v.READONLY_TOKEN, 'READONLY_TOKEN');
+  const retain    = keep(v.RETENTION_DAYS, 'RETENTION_DAYS') || '7';
+
   const clean = (s) => String(s).replace(/[\r\n]/g, '');
   const lines = [
+    '# AETHER — wireless network intelligence console',
+    '# Configuratie via /setup. Niet handmatig editen tenzij nodig.',
+    '',
+    '# UniFi controller',
     `UDM_HOST=${clean(v.UDM_HOST)}`,
     `UDM_USER=${clean(v.UDM_USER)}`,
     `UDM_PASS=${clean(v.UDM_PASS)}`,
     `UDM_SITE=${clean(v.UDM_SITE || 'default')}`,
+    '',
+    '# Server',
     `PORT=${clean(v.PORT || '3033')}`,
-    `POLL_MS=${clean(v.POLL_MS || '1500')}`
+    `POLL_MS=${clean(v.POLL_MS || '1500')}`,
+    `RETENTION_DAYS=${clean(retain)}`,
+    '',
+    '# WiGLE wardrive lookup (optioneel — https://wigle.net/account)',
+    `WIGLE_USER=${clean(wigleUser)}`,
+    `WIGLE_KEY=${clean(wigleKey)}`,
+    '',
+    '# Authenticatie (optioneel — laat leeg voor open toegang)',
+    `AUTH_TOKEN=${clean(authTok)}`,
+    `READONLY_TOKEN=${clean(roTok)}`,
   ];
   try {
     fs.writeFileSync(path.join(__dirname, '.env'), lines.join('\n') + '\n');
     fs.chmodSync(path.join(__dirname, '.env'), 0o600);
     res.json({ ok: true, message: 'opgeslagen — server herstart' });
-    // Self-restart na 1s
     setTimeout(() => process.exit(0), 1000);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -502,6 +534,72 @@ app.get('/api/clients/all', async (_, res) => {
   } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
 });
 
+// ─── Transient / passanten — clients met randomized MAC of zeer korte sessies ───
+// Clients in onze airspace die kort verbinden (probers, passanten, randomized-privacy MACs).
+// Detectie:
+//   - Randomized MAC = 2e-laagste bit van eerste byte gezet (locally-administered)
+//     d.w.z. eerste hex-byte's lower nibble = 2/6/A/E.
+//   - Korte sessie = (last_seen - first_seen) < THRESH (default 5 min)
+//   - Onbekende vendor (geen OUI-match)
+function isRandomizedMac(mac) {
+  if (!mac || mac.length < 2) return false;
+  const firstByte = parseInt(mac.replace(/[^0-9a-f]/gi, '').slice(0, 2), 16);
+  if (Number.isNaN(firstByte)) return false;
+  return (firstByte & 0x02) === 0x02;  // locally-administered bit
+}
+
+app.get('/api/clients/transient', async (req, res) => {
+  const within = Math.max(1, Math.min(168, Number(req.query.within) || 24));   // hours
+  const shortSessSec = Math.max(30, Math.min(7200, Number(req.query.short) || 300)); // 5 min default
+  try {
+    let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=${within}`);
+    if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=${within}`); }
+    if (!r.ok) return res.status(r.status).json({ ok:false, error:'unifi-failed' });
+    const j = await r.json();
+    const liveMacs = new Set((lastPayload.devices || []).map(d => (d.id || '').toLowerCase()));
+    const out = [];
+    for (const c of (j.data || [])) {
+      if (c.is_wired) continue;
+      const mac = (c.mac || '').toLowerCase();
+      if (!mac) continue;
+      const randomized = isRandomizedMac(mac);
+      const cls = intel.classify(mac, c.hostname || c.name || '', c.essid || c.ssid || '');
+      const knownVendor = !!cls.vendor;
+      const first = c.first_seen || null;
+      const last  = c.last_seen  || null;
+      const sessSec = (first && last) ? Math.max(0, last - first) : null;
+      const shortSession = sessSec != null && sessSec < shortSessSec;
+
+      const flags = [];
+      if (randomized)        flags.push('randomized');
+      if (!knownVendor)      flags.push('unknown-vendor');
+      if (shortSession)      flags.push('short-session');
+
+      // Filter: alleen rapporteren als minstens één indicator hit (anders is het gewoon een normale eigen client)
+      if (!flags.length) continue;
+
+      out.push({
+        mac,
+        name: c.name || c.hostname || c.oui || mac.slice(-5),
+        hostname: c.hostname || null,
+        vendor: cls.vendor,
+        kind: cls.kind,
+        ap: c.ap_mac || null,
+        ssid: c.essid || c.ssid || null,
+        firstSeen: first, lastSeen: last,
+        sessionSec: sessSec,
+        rssi: c.rssi ?? null,
+        channel: c.channel ?? null,
+        online: liveMacs.has(mac),
+        flags,
+        randomized, knownVendor, shortSession,
+      });
+    }
+    out.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    res.json({ ok: true, transients: out, withinHours: within, shortSessSec });
+  } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
+});
+
 // ─── WiGLE integration — publieke wardrive-database lookup ───
 // Vereist WIGLE_USER + WIGLE_KEY in .env (account: https://wigle.net/account)
 // Resultaat: globale observaties van een BSSID (locaties, SSID-historie, gezien-tellingen).
@@ -537,6 +635,81 @@ app.get('/api/wigle/bssid', async (req, res) => {
     }));
     res.json({ ok:true, totalResults: j.totalResults || results.length, results });
   } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
+});
+
+// ─── Intel: OUI vendor-lookup (lokaal, géén API-call) ───
+app.get('/api/intel/vendor', (req, res) => {
+  const mac = String(req.query.mac || '').trim();
+  if (!mac) return res.status(400).json({ ok:false, error:'mac-required' });
+  const c = intel.classify(mac, String(req.query.host || ''));
+  res.json({ ok:true, mac, ...c });
+});
+
+// Bulk-classify in één call — voor RECON cards / clients-table.
+// POST { macs: [{ mac, host? }, ...] } → { mac → {vendor,kind,risk,label} }
+app.post('/api/intel/classify', express.json(), (req, res) => {
+  const items = Array.isArray(req.body?.macs) ? req.body.macs : [];
+  const out = {};
+  for (const it of items.slice(0, 500)) {
+    const mac = typeof it === 'string' ? it : it?.mac;
+    const host = typeof it === 'string' ? '' : (it?.host || '');
+    const ssid = typeof it === 'string' ? '' : (it?.ssid || '');
+    if (mac) out[mac] = intel.classify(mac, host, ssid);
+  }
+  res.json({ ok:true, results: out });
+});
+
+// ─── Intel: WAN-IP via RIPEstat (ASN/route/abuse/geo) ───
+app.get('/api/intel/wan', async (_, res) => {
+  const ip = lastPayload.wan?.ip || null;
+  const r = await intel.wanIntel(ip);
+  res.json(r);
+});
+
+// ─── Intel: CVE-lookup voor UniFi-firmware via NVD ───
+app.get('/api/intel/cve', async (req, res) => {
+  const product = String(req.query.product || 'unifi');
+  const version = String(req.query.version || '');
+  const r = await intel.cveLookup({ vendor: 'ubiquiti', product, version });
+  res.json(r);
+});
+// Bulk-CVE voor alle eigen APs (gegroepeerd per firmware → minimum NVD-calls).
+app.get('/api/intel/cve/aps', async (_, res) => {
+  const devices = (lastPayload.devices || []).filter(d => d.type === 'uap' || d.is_ap || d.kind === 'ap')
+                  .map(d => ({ mac: d.id || d.mac, model: d.model || 'unifi', version: d.version || '' }));
+  // Fallback: gebruik apChannels (wat altijd UAP is)
+  const ch = lastPayload.apChannels || {};
+  const fromCh = Object.entries(ch).map(([mac, v]) => ({ mac, model: v.model || 'unifi', version: v.firmware || v.version || '' }));
+  const merged = devices.length ? devices : fromCh;
+  const r = await intel.cveLookupAll(merged);
+  res.json({ ok:true, results: r, scanned: merged.length });
+});
+
+// ─── Advisor — RF & config-aanbevelingen ───
+app.get('/api/advisor', (_, res) => {
+  try { res.json({ ok: true, ...advisor.analyse(lastPayload) }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── Notes (commentaar op BSSID/MAC) ───
+app.get('/api/notes', (req, res) => {
+  const kind = req.query.kind || null;
+  res.json({ ok: true, notes: db.notesAll(kind) });
+});
+app.put('/api/notes/:key', express.json(), (req, res) => {
+  const key = String(req.params.key).toLowerCase();
+  const { kind = 'neighbor', tag = null, note = null } = req.body || {};
+  // Lege note én lege tag → delete
+  if (!tag && !note) {
+    db.noteDelete(key);
+    return res.json({ ok: true, deleted: true });
+  }
+  db.noteUpsert({ key, kind, tag: tag ? String(tag).slice(0, 60) : null, note: note ? String(note).slice(0, 1000) : null });
+  res.json({ ok: true, note: db.noteGet(key) });
+});
+app.delete('/api/notes/:key', (req, res) => {
+  const key = String(req.params.key).toLowerCase();
+  res.json({ ok: true, deleted: db.noteDelete(key) });
 });
 
 // ─── Time Machine ───

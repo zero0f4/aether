@@ -328,7 +328,7 @@ const PREFS_DEFAULTS = {
 // IP-masker: per default verberg IPs (privacy). Toggle via prefs.showIps.
 function maskIp(ip) {
   if (!ip || prefs.showIps) return ip || '';
-  // Toon alleen netwerk-segment, mask laatste octet: 192.168.1.42 → 192.168.1.•
+  // Toon alleen netwerk-segment, mask laatste octet: 10.0.0.42 → 10.0.0.•
   const v4 = String(ip).match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.)\d{1,3}$/);
   if (v4) return v4[1] + '•';
   // IPv6 of vreemd → volledig maskeren
@@ -370,29 +370,52 @@ document.querySelectorAll('.lang-btn').forEach(b => {
 function setTab(tab) {
   prefs.tab = tab; savePrefs();
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.body.classList.toggle('stats-mode', tab === 'stats');
   document.body.classList.toggle('alerts-mode', tab === 'alerts');
   document.body.classList.toggle('spectrum-mode', tab === 'spectrum');
-  document.body.classList.toggle('recon-mode', tab === 'recon');
+  document.body.classList.toggle('intern-mode', tab === 'intern');
+  document.body.classList.toggle('extern-mode', tab === 'extern');
+  document.body.classList.toggle('advisor-mode', tab === 'advisor');
+  // recon-mode blijft als alias zodat oude CSS/code blijft werken
+  document.body.classList.toggle('recon-mode', tab === 'intern' || tab === 'extern' || tab === 'advisor');
   if (tab === 'alerts') refreshAlertsPage();
   if (tab === 'spectrum') resizeSpectrumCanvases();
-  if (tab === 'recon' && typeof refreshReconPage === 'function') refreshReconPage();
+  if (tab === 'intern' || tab === 'extern') {
+    if (typeof loadNotes === 'function') loadNotes().then(() => refreshReconPage());
+    refreshReconPage();
+    if (tab === 'intern') {
+      if (typeof refreshOfflineClients === 'function') refreshOfflineClients();
+      if (typeof refreshDNA === 'function') refreshDNA();
+    } else {
+      if (typeof refreshTransientStations === 'function') refreshTransientStations();
+    }
+  }
+  if (tab === 'advisor' && typeof refreshAdvisor === 'function') refreshAdvisor();
 }
 
 // Maak de spectrum-canvases breder als we in fullscreen-mode staan
 function resizeSpectrumCanvases() {
   const c24 = document.getElementById('spec24');
   const c5 = document.getElementById('spec5');
+  const c6 = document.getElementById('spec6');
   if (!c24 || !c5) return;
   const isFullscreen = document.body.classList.contains('spectrum-mode');
   if (isFullscreen) {
-    const W = Math.max(900, Math.min(window.innerWidth - 160, 1800));
-    // beide full-width gestapeld
-    c24.width = W; c24.height = 360;
-    c5.width  = W; c5.height  = 300;
+    // Driedelig fullscreen: 2.4 / 5 / 6 GHz — pas elke canvas aan op zijn parent
+    [c24, c5, c6].forEach(c => {
+      if (!c) return;
+      const parent = c.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+      const labelOffset = 26;  // .panel-label ruimte
+      const w = Math.max(400, rect.width);
+      const h = Math.max(140, rect.height - labelOffset);
+      c.width = Math.floor(w);
+      c.height = Math.floor(h);
+    });
   } else {
     c24.width = 540; c24.height = 160;
     c5.width  = 700; c5.height  = 160;
+    if (c6) { c6.width = 540; c6.height = 160; }
   }
 }
 window.addEventListener('resize', () => {
@@ -836,7 +859,7 @@ function collectAlerts() {
     if (n.disturbing) out.rogue.push({ name: n.ssid || '(hidden)', detail: `kanaal ${n.channel} · ${n.rssi} dBm · ${(n.band||'').toUpperCase()}`, severity: 'rogue', rssi: n.rssi });
   }
   out.rogue.sort((a,b) => (b.rssi||-99) - (a.rssi||-99));
-  out.rogue = out.rogue.slice(0, 30);
+  out.rogue = out.rogue.slice(0, 15);  // top 15 sterkste storende buren — anders overspoeld de radar
   // Disconnected: stations met geen ap of zwak signaal
   for (const s of stations.values()) {
     if (!s.ap || s.ap === 'unknown') out.disconnected.push({ name: s.name, detail: 'geen ap-koppeling', severity: 'warning' });
@@ -878,15 +901,414 @@ function bandFromRadio(r) {
   return '5';
 }
 
+// ─── ADVISOR — RF & config-aanbevelingen ───
+let advisorData = null;
+async function refreshAdvisor() {
+  const list = document.getElementById('advisor-list');
+  if (!list) return;
+  list.innerHTML = '<div style="color:var(--fg-faint);padding:30px;text-align:center">analyseren…</div>';
+  try {
+    const r = await fetch('/api/advisor', { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) {
+      list.innerHTML = `<div style="color:var(--crit);padding:14px">advisor-fout: ${j.error||'onbekend'}</div>`;
+      return;
+    }
+    advisorData = j;
+    document.getElementById('advisor-score').textContent = j.score;
+    document.getElementById('advisor-crit').textContent  = j.counts.crit;
+    document.getElementById('advisor-warn').textContent  = j.counts.warn;
+    document.getElementById('advisor-info').textContent  = j.counts.info;
+    renderAdvisor();
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--crit);padding:14px">${e.message}</div>`;
+  }
+}
+function renderAdvisor() {
+  if (!advisorData) return;
+  const list = document.getElementById('advisor-list');
+  const filt = document.getElementById('advisor-filter')?.value || '';
+  const items = advisorData.advice.filter(a => !filt || a.category === filt);
+  if (!items.length) {
+    list.innerHTML = '<div class="adv-empty">✓ Geen aanbevelingen voor dit filter — alles ziet er goed uit.</div>';
+    return;
+  }
+  const SEV_LBL = { crit: 'KRITIEK', warn: 'WAARSCHUWING', info: 'INFO' };
+  const CAT_LBL = {
+    'channel-plan':   'KANAALPLAN',
+    'channel-width':  'KANAALBREEDTE',
+    'dfs':            'DFS',
+    'firmware':       'FIRMWARE',
+    'mesh':           'MESH-UPLINK',
+    'coverage':       'DEKKING',
+    'band-steering':  'BAND-STEERING',
+    'topology':       'TOPOLOGIE',
+    'wan':            'WAN',
+  };
+  list.innerHTML = items.map(a => `
+    <div class="adv-card sev-${a.severity}">
+      <div class="adv-head">
+        <span class="adv-sev sev-${a.severity}">${SEV_LBL[a.severity] || a.severity}</span>
+        <span class="adv-cat">${CAT_LBL[a.category] || a.category}</span>
+        <span class="adv-title">${a.title.replace(/</g,'&lt;')}</span>
+      </div>
+      <div class="adv-desc">${a.description.replace(/</g,'&lt;')}</div>
+      <div class="adv-rec"><b>Aanbeveling:</b> ${a.recommend.replace(/</g,'&lt;')}</div>
+      ${a.affected?.length ? `<div class="adv-aff">${a.affected.map(x => `<span class="adv-tag">${String(x).replace(/</g,'&lt;')}</span>`).join('')}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('advisor-filter')?.addEventListener('change', renderAdvisor);
+  document.getElementById('advisor-refresh')?.addEventListener('click', refreshAdvisor);
+});
+
+// ─── NOTES: commentaar op BSSID/MAC ───
+const notesMap = new Map(); // key (lowercase mac/bssid) → { tag, note, kind, updated }
+
+async function loadNotes() {
+  try {
+    const r = await fetch('/api/notes');
+    const j = await r.json();
+    if (!j.ok) return;
+    notesMap.clear();
+    for (const [k, n] of Object.entries(j.notes || {})) notesMap.set(k.toLowerCase(), n);
+  } catch (_) {}
+}
+
+function noteOf(key) {
+  if (!key) return null;
+  return notesMap.get(String(key).toLowerCase()) || null;
+}
+
+function noteBadge(key) {
+  const n = noteOf(key);
+  if (!n) return '';
+  const tag = n.tag ? `<span class="note-tag">${n.tag.replace(/</g,'&lt;')}</span>` : '';
+  const txt = n.note ? `<span class="note-txt" title="${(n.note||'').replace(/"/g,'&quot;')}">📝</span>` : '';
+  return tag + txt;
+}
+
+async function saveNote(key, kind, tag, note) {
+  const r = await fetch('/api/notes/' + encodeURIComponent(key), {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, tag, note }),
+  });
+  const j = await r.json();
+  if (j.ok) {
+    if (j.deleted) notesMap.delete(key.toLowerCase());
+    else if (j.note) notesMap.set(key.toLowerCase(), j.note);
+  }
+  return j;
+}
+
+// Klikhandler voor rijen met data-note-key
+document.addEventListener('click', (ev) => {
+  // Alleen op cellen, niet op WiGLE-knop of andere buttons
+  if (ev.target.closest('.wigle-btn') || ev.target.closest('.note-popover') || ev.target.closest('button')) return;
+  const row = ev.target.closest('[data-note-key]');
+  if (!row) {
+    // klik buiten popover sluit hem
+    const open = document.querySelector('.note-popover');
+    if (open) open.remove();
+    return;
+  }
+  ev.stopPropagation();
+  document.querySelectorAll('.note-popover').forEach(p => p.remove());
+  openNoteEditor(row);
+});
+
+function openNoteEditor(row) {
+  const key = row.getAttribute('data-note-key');
+  const kind = row.getAttribute('data-note-kind') || 'neighbor';
+  const ctx = row.getAttribute('data-note-ctx') || ''; // SSID of naam, voor weergave
+  const cur = noteOf(key) || { tag: '', note: '' };
+  const pop = document.createElement('div');
+  pop.className = 'note-popover';
+  pop.innerHTML = `
+    <div class="note-head">📝 Notitie · <span class="mono">${key}</span><span style="float:right;color:var(--fg-faint)">${ctx.slice(0,40).replace(/</g,'&lt;')}</span></div>
+    <div class="note-body">
+      <label>Tag <small>(kort label, bv. "buurman", "onbekend", "verdacht")</small></label>
+      <input type="text" id="note-tag" maxlength="60" value="${(cur.tag||'').replace(/"/g,'&quot;')}" placeholder="buurman / kantoor / verdacht …">
+      <div class="note-presets">
+        <button data-preset="buurman">buurman</button>
+        <button data-preset="onbekend">onbekend</button>
+        <button data-preset="kantoor">kantoor</button>
+        <button data-preset="winkel">winkel</button>
+        <button data-preset="auto">auto</button>
+        <button data-preset="verdacht" class="risk">verdacht</button>
+        <button data-preset="bekend">bekend</button>
+      </div>
+      <label style="margin-top:10px">Notitie</label>
+      <textarea id="note-text" rows="4" maxlength="1000" placeholder="vrij commentaar — bv. 'Ziggo-modem nr 23, sterk signaal in slaapkamer'">${(cur.note||'').replace(/</g,'&lt;')}</textarea>
+      <div class="note-actions">
+        <button class="btn-save">opslaan</button>
+        <button class="btn-del" ${cur.tag||cur.note?'':'disabled'}>verwijderen</button>
+        <button class="btn-cancel">annuleer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(pop);
+  const r = row.getBoundingClientRect();
+  pop.style.top = (r.bottom + 6 + window.scrollY) + 'px';
+  pop.style.left = Math.min(window.innerWidth - 460, Math.max(8, r.left + window.scrollX)) + 'px';
+  pop.querySelector('#note-tag').focus();
+
+  pop.querySelectorAll('.note-presets button').forEach(b => b.addEventListener('click', () => {
+    pop.querySelector('#note-tag').value = b.dataset.preset;
+  }));
+  pop.querySelector('.btn-cancel').addEventListener('click', () => pop.remove());
+  pop.querySelector('.btn-save').addEventListener('click', async () => {
+    const tag = pop.querySelector('#note-tag').value.trim();
+    const note = pop.querySelector('#note-text').value.trim();
+    await saveNote(key, kind, tag, note);
+    pop.remove();
+    refreshReconPage();
+  });
+  pop.querySelector('.btn-del').addEventListener('click', async () => {
+    await saveNote(key, kind, '', '');
+    pop.remove();
+    refreshReconPage();
+  });
+}
+
+// ─── INTEL: vendor-classifier (server-cache via /api/intel/classify) ───
+const intelMap = new Map(); // mac → { vendor, kind, risk, label }
+let intelLastFetch = 0;
+
+// SVG-logo's per kind. Niet-gemapte kinds vallen terug op KIND_ICONS-emoji.
+const KIND_LOGOS = {
+  // ISP's (NL providers)
+  'isp-ziggo':   '/logos/ziggo.svg',
+  'isp-kpn':     '/logos/kpn.svg',
+  'isp-tele2':   '/logos/tele2.svg',
+  'isp-odido':   '/logos/odido.svg',
+  'isp-delta':   '/logos/delta.svg',
+  'isp-xs4all':  '/logos/xs4all.svg',
+  'isp-caiway':  '/logos/caiway.svg',
+  'isp-freedom': '/logos/freedom.svg',
+
+  // Eigen UniFi
+  unifi: '/logos/ubiquiti.svg',
+
+  // Apple devices
+  apple: '/logos/apple.svg', 'apple-mobile': '/logos/apple.svg',
+
+  // Samsung
+  samsung: '/logos/samsung.svg', 'samsung-mobile': '/logos/samsung.svg',
+
+  // Google
+  google: '/logos/google.svg', 'voice-google': '/logos/google.svg',
+
+  // Amazon
+  'voice-amazon': '/logos/amazon.svg',
+
+  // Speakers
+  'speaker-sonos': '/logos/sonos.svg',
+
+  // Smart home
+  'iot-hue': '/logos/hue.svg',
+  'iot-ikea': '/logos/ikea.svg',
+  doorbell: '/logos/ring.svg',
+  thermostat: '/logos/tado.svg',
+
+  // TV
+  'tv-sony': '/logos/sony.svg', 'tv-lg': '/logos/lg.svg',
+
+  // Game
+  'console-nintendo': '/logos/nintendo.svg',
+  'console-playstation': '/logos/playstation.svg',
+  'console-xbox': '/logos/xbox.svg',
+
+  // NAS
+  'nas-synology': '/logos/synology.svg',
+
+  // 3D / Pi
+  'printer-3d': '/logos/bambu.svg',
+  pi: '/logos/raspberry.svg',
+};
+
+const KIND_ICONS = {
+  // Fallbacks voor kinds zonder eigen logo
+  ap: '📡', 'isp-cpe': '🔌',
+  xiaomi: '📱', oneplus: '📱', huawei: '📱', nokia: '📱', 'cn-phone': '📱',
+  'pc-microsoft': '💻', 'pc-dell': '💻', 'pc-hp': '💻',
+  'pc-lenovo': '💻', 'pc-asus': '💻', 'pc-intel': '💻',
+  'speaker-bose': '🔊', speaker: '🔊',
+  cam: '📹', lock: '🔒', vacuum: '🤖',
+  'iot-cloud': '☁', 'iot-tplink': '🔧', 'iot-shelly': '🔌',
+  'iot-sonoff': '🔧', 'iot-mcu': '🔧', 'iot-chip': '🔧',
+  tv: '📺', 'tv-nvidia': '📺',
+  'nas-qnap': '💾', 'nas-wd': '💾',
+  'router-other': '📡', 'router-tplink': '📡', 'router-mesh': '📡',
+  car: '🚗', printer: '🖨',
+  // Witgoed / appliances
+  'appliance-washer':     '🧺',
+  'appliance-dryer':      '🌀',
+  'appliance-dishwasher': '🍽',
+  'appliance-fridge':     '🧊',
+  'appliance-oven':       '🍳',
+  'appliance-soundbar':   '🔊',
+  'appliance-hvac':       '❄',
+  'appliance-mount':      '🔩',
+  'lg-generic':           '📦',
+  'cn-oem': '⚠', generic: '', unknown: '',
+};
+
+function kindIcon(info) {
+  if (!info) return '';
+  const tt = (info.vendor||'') + (info.label?' · '+info.label:'');
+  const logo = KIND_LOGOS[info.kind];
+  if (logo) {
+    return `<img class="dev-logo" src="${logo}" alt="${info.label||info.kind}" title="${tt.replace(/"/g,'&quot;')}" loading="lazy">`;
+  }
+  const ico = KIND_ICONS[info.kind] || '';
+  if (!ico) return '';
+  return `<span class="dev-icon" data-kind="${info.kind}" title="${tt.replace(/"/g,'&quot;')}">${ico}</span>`;
+}
+function riskBadge(info) {
+  if (!info || !info.risk || info.risk === 'low' || info.risk === 'unknown') return '';
+  return `<span class="risk-badge ${info.risk}" title="${info.label||''} (${info.vendor||''})">${info.risk}</span>`;
+}
+
+async function ensureIntel(items) {
+  // Items mogen zijn: ['mac', ...] OF [{mac, host?, ssid?}, ...]
+  const need = [];
+  for (const it of items || []) {
+    const mac = typeof it === 'string' ? it : it?.mac;
+    if (mac && !intelMap.has(mac)) need.push(typeof it === 'string' ? { mac } : it);
+  }
+  if (need.length === 0) return;
+  // Throttle: max 1x per 3s sturen
+  const now = Date.now();
+  if (now - intelLastFetch < 3000) return;
+  intelLastFetch = now;
+  try {
+    const r = await fetch('/api/intel/classify', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ macs: need.slice(0, 400) }),
+    });
+    const j = await r.json();
+    if (j.ok && j.results) {
+      for (const [mac, info] of Object.entries(j.results)) intelMap.set(mac, info);
+      // Re-render zodra we nieuwe info hebben (maar alleen als RECON open is)
+      if (document.body.classList.contains('recon-mode') && typeof refreshReconPage === 'function') {
+        refreshReconPage();
+        if (typeof refreshOfflineClients === 'function') refreshOfflineClients();
+      }
+    }
+  } catch (e) { /* stil */ }
+}
+
+// ─── WAN INTEL panel ───
+async function refreshWanIntel() {
+  const el = document.getElementById('recon-wan-panel');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/intel/wan');
+    const j = await r.json();
+    if (!j.ok) {
+      el.innerHTML = `<div style="color:var(--fg-faint)">${j.error === 'no-ip' ? 'Geen WAN-IP zichtbaar (UDM nog niet gepolld?)' : 'WAN-intel mislukt: ' + (j.msg||j.error)}</div>`;
+      return;
+    }
+    const asn = (j.asns||[])[0] || '—';
+    const w = j.whois || {};
+    const g = j.geo || {};
+    const ab = (j.abuse||[]).slice(0,2).join(', ') || '—';
+    el.innerHTML = `
+      <div class="wan-grid">
+        <div class="wan-cell"><span class="wan-lab">WAN-IP</span><span class="wan-val mono">${j.ip || '—'}</span></div>
+        <div class="wan-cell"><span class="wan-lab">ASN</span><span class="wan-val mono">AS${asn}</span></div>
+        <div class="wan-cell"><span class="wan-lab">Prefix</span><span class="wan-val mono">${j.prefix || '—'}</span></div>
+        <div class="wan-cell"><span class="wan-lab">ISP / Org</span><span class="wan-val">${w.org || w.descr || w.netname || '—'}</span></div>
+        <div class="wan-cell"><span class="wan-lab">Land</span><span class="wan-val">${w.country || g.country || '—'}</span></div>
+        <div class="wan-cell"><span class="wan-lab">Stad (geo)</span><span class="wan-val">${g.city || '—'}</span></div>
+        <div class="wan-cell"><span class="wan-lab">Abuse-contact</span><span class="wan-val mono" style="font-size:11px">${ab}</span></div>
+        <div class="wan-cell"><span class="wan-lab">Bron</span><span class="wan-val">RIPEstat${j.cached?' (cache)':''}</span></div>
+      </div>
+      ${g.latitude ? `<div style="margin-top:10px"><a class="wigle-link" target="_blank" href="https://www.openstreetmap.org/?mlat=${g.latitude}&mlon=${g.longitude}#map=14/${g.latitude}/${g.longitude}">🗺 Open op OpenStreetMap</a></div>` : ''}`;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--warn)">Fout: ${e.message}</div>`;
+  }
+}
+
+// ─── CVE-pills voor eigen APs ───
+const cveByAp = new Map(); // mac → { count, top, all }
+
+async function refreshCveAps() {
+  try {
+    const r = await fetch('/api/intel/cve/aps');
+    const j = await r.json();
+    if (!j.ok) return;
+    for (const [mac, info] of Object.entries(j.results || {})) cveByAp.set(mac, info);
+    // Patch bestaande pills in DOM (geen volledige re-render nodig)
+    document.querySelectorAll('.recon-card[data-mac]').forEach(card => {
+      const mac = card.getAttribute('data-mac');
+      const info = cveByAp.get(mac);
+      const slot = card.querySelector('.cve-slot');
+      if (!slot) return;
+      slot.innerHTML = renderCvePill(mac, info);
+    });
+  } catch (e) { /* stil */ }
+}
+
+function renderCvePill(mac, info) {
+  if (!info) return '<span class="cve-pill unk" title="CVE-scan in afwachting">⏳ scan…</span>';
+  if (info.error) return `<span class="cve-pill unk" title="${info.error}">⚠ scan-fout</span>`;
+  if (!info.count) return '<span class="cve-pill ok" title="NVD: 0 matches voor deze versie">✓ 0 CVEs</span>';
+  const top = info.top || {};
+  const sev = top.severity || '';
+  const cls = (sev === 'CRITICAL' || sev === 'HIGH') ? 'crit' : (sev === 'MEDIUM' ? 'warn' : 'ok');
+  return `<span class="cve-pill ${cls}" data-mac="${mac}" title="Klik voor details">⚠ ${info.count} CVE${info.count===1?'':'s'} · top ${sev||'?'}</span>`;
+}
+
+// CVE popover
+document.addEventListener('click', (ev) => {
+  const pill = ev.target.closest('.cve-pill[data-mac]');
+  if (!pill) {
+    const open = document.querySelector('.cve-popover');
+    if (open && !ev.target.closest('.cve-popover')) open.remove();
+    return;
+  }
+  ev.stopPropagation();
+  document.querySelectorAll('.cve-popover').forEach(p => p.remove());
+  const mac = pill.dataset.mac;
+  const info = cveByAp.get(mac);
+  if (!info || !info.all) return;
+  const pop = document.createElement('div');
+  pop.className = 'cve-popover';
+  const apName = (apChannels?.[mac]?.name) || mac;
+  const fw = (apChannels?.[mac]?.firmware) || '';
+  pop.innerHTML = `
+    <div class="cve-head">${apName} · firmware ${fw} · ${info.count} CVEs (NVD)</div>
+    <div class="cve-body">
+      ${(info.all || []).map(c => `
+        <div class="cve-row">
+          <div class="cve-id"><a href="${c.url}" target="_blank">${c.id}</a><span class="cve-sev ${c.severity||''}">${c.severity||'?'} ${c.score||''}</span></div>
+          <div class="cve-summary">${(c.summary||'').replace(/</g,'&lt;')}</div>
+        </div>`).join('')}
+    </div>`;
+  document.body.appendChild(pop);
+  const r = pill.getBoundingClientRect();
+  pop.style.top = (r.bottom + 6 + window.scrollY) + 'px';
+  pop.style.left = Math.min(window.innerWidth - 560, r.left + window.scrollX) + 'px';
+});
+
 function refreshReconPage() {
   const ownEl = document.getElementById('recon-own-cards');
   const extEl = document.getElementById('recon-ext-rows');
   if (!ownEl || !extEl) return;
 
-  const search = (document.getElementById('recon-search')?.value || '').toLowerCase().trim();
-  const bandF = document.getElementById('recon-band-filter')?.value || '';
-  const onlyDist = document.getElementById('recon-only-disturbing')?.checked || false;
-  const onlyOwn  = document.getElementById('recon-only-own')?.checked || false;
+  // INTERN gebruikt #recon-search/#recon-band-filter, EXTERN gebruikt #extern-search/#extern-band-filter.
+  // We mergen beide zodat de pagina correct filtert ongeacht welke open is.
+  const internSearch = (document.getElementById('recon-search')?.value || '').toLowerCase().trim();
+  const externSearch = (document.getElementById('extern-search')?.value || '').toLowerCase().trim();
+  const search = document.body.classList.contains('extern-mode') ? externSearch : internSearch;
+  const internBand = document.getElementById('recon-band-filter')?.value || '';
+  const externBand = document.getElementById('extern-band-filter')?.value || '';
+  const bandF = document.body.classList.contains('extern-mode') ? externBand : internBand;
+  const onlyDist = document.getElementById('extern-only-disturbing')?.checked || false;
+  const onlyOwn  = false;
 
   // ── Own APs (uit apChannels: heeft firmware/IP/uptime; apsMap heeft alleen visualisatie-state) ──
   const channelsByMac = (typeof apChannels === 'object' && apChannels) ? apChannels : {};
@@ -936,9 +1358,9 @@ function refreshReconPage() {
         </div>`;
     }).join('');
     ownHtml += `
-      <div class="recon-card">
+      <div class="recon-card" data-mac="${ap.mac || ''}">
         <div class="recon-card-head">
-          <span class="recon-card-name">${ap.name || ap.mac}</span>
+          <span class="recon-card-name">📡 ${ap.name || ap.mac}</span>
           <span class="recon-card-model">${ap.model || ''}</span>
         </div>
         <div class="row"><span class="lab">MAC</span><span class="v">${ap.mac || '—'}</span></div>
@@ -975,8 +1397,10 @@ function refreshReconPage() {
     const rssiPct = Math.max(5, Math.min(100, ((n.rssi||-90) + 90) * 1.4));
     const rssiCls = n.rssi >= -65 ? 'ok' : n.rssi >= -75 ? '' : 'warn';
     const ageMin = n.age != null ? Math.round(n.age/60) : null;
-    extHtml += `<tr data-bssid="${n.id || ''}">
-      <td>${(n.ssid||'(hidden)').replace(/</g,'&lt;')} <button class="wigle-btn" title="Opzoeken in WiGLE wardrive-database" data-bssid="${n.id||''}">🌐</button></td>
+    const nInfo = intelMap.get(n.id);
+    const nNote = noteOf(n.id);
+    extHtml += `<tr class="clickable-row${nNote?' has-note':''}" data-bssid="${n.id || ''}" data-note-key="${(n.id||'').toLowerCase()}" data-note-kind="neighbor" data-note-ctx="${(n.ssid||'').replace(/"/g,'&quot;')}" title="Klik voor commentaar / tag">
+      <td>${kindIcon(nInfo)}${(n.ssid||'(hidden)').replace(/</g,'&lt;')}${riskBadge(nInfo)}${noteBadge(n.id)} <button class="wigle-btn" title="Opzoeken in WiGLE wardrive-database" data-bssid="${n.id||''}">🌐</button>${nInfo?.vendor?'<div style="font-size:10px;color:var(--fg-faint);margin-top:2px">'+nInfo.vendor+'</div>':''}</td>
       <td style="font-family:var(--mono);color:var(--fg-dim)">${n.id || '—'}</td>
       <td>${band} GHz</td>
       <td class="r">${n.channel ?? '—'}</td>
@@ -1013,10 +1437,12 @@ function refreshReconPage() {
     const fmtRate = (r) => r ? (r >= 1000 ? (r/1000).toFixed(1)+'M' : r+'k') : '—';
     const fmtKbps = (b) => b ? Math.round(b/1024) : 0;
     if (cliShown > 500) break;  // safety cap
-    cliHtml += `<tr>
-      <td>${(c.name||'(onbekend)').replace(/</g,'&lt;')}${c.subrouter?' <span class="badge dist" style="margin-left:4px">subrouter</span>':''}</td>
+    const cInfo = intelMap.get(c.id);
+    const cNote = noteOf(c.id);
+    cliHtml += `<tr class="clickable-row${cNote?' has-note':''}" data-note-key="${(c.id||'').toLowerCase()}" data-note-kind="client" data-note-ctx="${(c.name||'').replace(/"/g,'&quot;')}" title="Klik voor commentaar / tag">
+      <td>${kindIcon(cInfo)}${(c.name||'(onbekend)').replace(/</g,'&lt;')}${riskBadge(cInfo)}${noteBadge(c.id)}${c.subrouter?' <span class="badge dist" style="margin-left:4px">subrouter</span>':''}</td>
       <td style="font-family:var(--mono);color:var(--fg-dim)">${c.id || '—'}</td>
-      <td>${(c.os||c.family||c.oui||'').toString().slice(0,28)}</td>
+      <td>${(cInfo?.vendor || c.os || c.family || c.oui || '').toString().slice(0,32)}</td>
       <td>${apN}</td>
       <td>${(c.ssid||'').replace(/</g,'&lt;')}</td>
       <td>${band} GHz</td>
@@ -1035,6 +1461,12 @@ function refreshReconPage() {
   document.getElementById('recon-count-ext').textContent = ext.length;
   document.getElementById('recon-count-dist').textContent = distCount;
   document.getElementById('recon-count-cli').textContent = cli.length;
+
+  // ── Intel: classify alle MACs (clients + neighbors) — met SSID/hostname ──
+  const items = [];
+  for (const c of cli) if (c.id) items.push({ mac: c.id, host: c.name || '', ssid: c.ssid || '' });
+  for (const n of ext) if (n.id) items.push({ mac: n.id, host: '', ssid: n.ssid || '' });
+  ensureIntel(items);
 }
 
 // ─── WiGLE wardrive-lookup popover ───
@@ -1090,18 +1522,76 @@ document.addEventListener('click', async (ev) => {
 });
 
 // Re-render bij filter-wijziging
-['recon-search','recon-band-filter','recon-only-disturbing','recon-only-own'].forEach(id => {
+['recon-search','recon-band-filter','extern-search','extern-band-filter','extern-only-disturbing'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', refreshReconPage);
 });
-// Periodieke auto-refresh als de tab actief is (data komt via WS)
+// Periodieke auto-refresh: enkel relevante panelen voor de active sub-page
 setInterval(() => {
-  if (document.body.classList.contains('recon-mode')) {
+  if (document.body.classList.contains('intern-mode')) {
     refreshReconPage();
     refreshOfflineClients();
     refreshDNA();
+  } else if (document.body.classList.contains('extern-mode')) {
+    refreshReconPage();
+    refreshTransientStations();
   }
 }, 5000);
+
+// ─── TRANSIENT stations (randomized MAC / korte sessie / onbekende vendor) ───
+async function refreshTransientStations() {
+  const tb = document.getElementById('recon-transient-rows');
+  if (!tb) return;
+  try {
+    const r = await fetch('/api/clients/transient?within=24', { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) return;
+    const items = j.transients || [];
+    const cnt = document.getElementById('recon-count-trans');
+    if (cnt) cnt.textContent = items.length;
+    const channels = (typeof apChannels === 'object') ? apChannels : {};
+    const fmtAgo = ts => {
+      if (!ts) return '—';
+      const sec = Math.floor(Date.now()/1000) - ts;
+      if (sec < 60)   return sec + 's';
+      if (sec < 3600) return Math.floor(sec/60) + 'm';
+      if (sec < 86400) return Math.floor(sec/3600) + 'h';
+      return Math.floor(sec/86400) + 'd';
+    };
+    const fmtSess = s => {
+      if (s == null) return '—';
+      if (s < 60)   return s + 's';
+      if (s < 3600) return Math.floor(s/60) + 'm';
+      return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+    };
+    const flagPill = f => {
+      const map = {
+        'randomized':     { c: 'warn', t: 'privacy-MAC', tip: 'Locally-administered bit gezet — apparaat gebruikt random MAC' },
+        'unknown-vendor': { c: 'dist', t: 'unknown',     tip: 'Geen IEEE-vendor gevonden voor deze OUI' },
+        'short-session':  { c: '',     t: 'short',       tip: 'Sessie korter dan 5 min — typisch passant' },
+      };
+      const m = map[f]; if (!m) return '';
+      return `<span class="badge ${m.c}" title="${m.tip}">${m.t}</span>`;
+    };
+    let html = '';
+    for (const t of items) {
+      const apN = (channels[t.ap]?.name) || (apsMap.get(t.ap)?.name) || (t.ap ? t.ap.slice(-5) : '—');
+      const info = intelMap.get(t.mac) || { kind: t.kind, vendor: t.vendor, label: t.kind };
+      const flagsHtml = (t.flags || []).map(flagPill).join(' ');
+      html += `<tr class="clickable-row${noteOf(t.mac)?' has-note':''}" data-note-key="${t.mac}" data-note-kind="client" data-note-ctx="${(t.name||'').replace(/"/g,'&quot;')}" title="Klik voor commentaar / tag">
+        <td>${kindIcon(info)}${(t.name||'(onbekend)').replace(/</g,'&lt;')}${riskBadge(info)}${noteBadge(t.mac)}${t.online?' <span class="badge ok" style="margin-left:4px">live</span>':''}</td>
+        <td class="mono">${t.mac}</td>
+        <td>${flagsHtml}</td>
+        <td>${(t.vendor || '—').toString().slice(0,32)}</td>
+        <td>${apN}</td>
+        <td>${(t.ssid||'').replace(/</g,'&lt;')}</td>
+        <td class="r">${fmtSess(t.sessionSec)}</td>
+        <td class="r">${fmtAgo(t.lastSeen)}</td>
+      </tr>`;
+    }
+    tb.innerHTML = html || '<tr><td colspan="8" style="text-align:center;color:var(--fg-faint);padding:14px">geen transient stations in afgelopen 24u</td></tr>';
+  } catch (e) { console.error('[transient]', e); }
+}
 
 // ─── OFFLINE clients (afgelopen 24u, niet meer connected) ───
 async function refreshOfflineClients() {
@@ -1123,13 +1613,17 @@ async function refreshOfflineClients() {
       return Math.floor(sec/86400) + 'd';
     };
     let html = '';
+    const macsForIntel = [];
     for (const c of offline) {
       const apN = (channels[c.ap]?.name) || (apsMap.get(c.ap)?.name) || (c.ap ? c.ap.slice(-5) : '—');
       const rssiPct = Math.max(5, Math.min(100, ((c.lastRssi||-90) + 90) * 1.4));
-      html += `<tr>
-        <td>${(c.name||'(onbekend)').replace(/</g,'&lt;')}</td>
+      const info = intelMap.get(c.mac);
+      const oNote = noteOf(c.mac);
+      if (c.mac && !info) macsForIntel.push(c.mac);
+      html += `<tr class="clickable-row${oNote?' has-note':''}" data-note-key="${(c.mac||'').toLowerCase()}" data-note-kind="client" data-note-ctx="${(c.name||'').replace(/"/g,'&quot;')}" title="Klik voor commentaar / tag">
+        <td>${kindIcon(info)}${(c.name||'(onbekend)').replace(/</g,'&lt;')}${riskBadge(info)}${noteBadge(c.mac)}</td>
         <td class="mono">${c.mac}</td>
-        <td>${(c.oui||'').slice(0,28)}</td>
+        <td>${(info?.vendor || c.oui || '').toString().slice(0,32)}</td>
         <td>${apN}</td>
         <td>${(c.ssid||'').replace(/</g,'&lt;')}</td>
         <td class="r">${c.lastRssi != null ? '<span class="rssi-bar" style="--rssi-pct:'+rssiPct+'%"></span>'+c.lastRssi+' dBm' : '—'}</td>
@@ -1137,6 +1631,7 @@ async function refreshOfflineClients() {
       </tr>`;
     }
     tb.innerHTML = html || '<tr><td colspan="7" style="text-align:center;color:var(--fg-faint);padding:14px">geen offline clients in afgelopen 24u</td></tr>';
+    if (macsForIntel.length) ensureIntel(macsForIntel.map(m => ({ mac: m })));
   } catch (e) { console.error('[offline]', e); }
 }
 
@@ -1289,10 +1784,9 @@ function drawAlertsRadar(a) {
     color: 'rgba(255,90,90,0.95)', glow: 'rgba(255,90,90,0.7)', size: 5 });
   for (const x of a.quota) items.push({ ...x, zone: 3, kind: 'quota',
     color: 'rgba(255,180,80,0.95)', glow: 'rgba(255,180,80,0.5)', size: 3.5 });
-  // Zone 4: externe APs (storend op overlap-kanaal) — altijd label
+  // Zone 4: externe APs (storend op overlap-kanaal) — labels alleen op sweep om clutter te vermijden
   for (const x of a.rogue) items.push({ ...x, zone: 4, kind: 'external-ap',
     color: 'rgba(255,140,90,0.95)', glow: 'rgba(255,140,90,0.55)', size: 4.5,
-    labelAlways: true,
     label: `${(x.name||'').slice(0,16)} · ch${(x.detail||'').match(/kanaal\s+(\d+)/)?.[1] || (x.detail||'').match(/ch\s*(\d+)/)?.[1] || '?'}`
   });
   _alertItems = items;
@@ -1347,16 +1841,32 @@ function renderRadarFrame() {
   c.lineWidth = 1;
   c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(sweepAngle) * R, cy + Math.sin(sweepAngle) * R); c.stroke();
 
-  // Plot items per zone
-  for (const item of _alertItems) {
-    const seed = Array.from(String(item.name||'')).reduce((s, ch) => s + ch.charCodeAt(0), 0);
-    const angle = ((seed * 137.5) % 360) * Math.PI / 180; // golden-angle
-    const zoneIdx = (item.zone || 1) - 1;
-    const inner = zoneIdx === 0 ? 16 : zoneR[zoneIdx-1] + 6;
-    const outer = zoneR[zoneIdx] - 4;
-    const dist = inner + ((seed * 31) % 100) / 100 * Math.max(8, outer - inner);
-    const x = cx + Math.cos(angle) * dist;
-    const y = cy + Math.sin(angle) * dist;
+  // Verdeel items gelijkmatig per zone — voorkomt clustering die golden-angle modulo 360 introduceert
+  const byZone = [[], [], [], []];
+  for (const it of _alertItems) {
+    const z = Math.max(1, Math.min(4, it.zone || 1)) - 1;
+    byZone[z].push(it);
+  }
+  // Stabiele sortering per zone op naam zodat positie niet flikkert tussen frames
+  for (const arr of byZone) arr.sort((a, b) => String(a.name||'').localeCompare(String(b.name||'')));
+
+  // Plot items met evenredig verdeelde hoek per zone
+  for (let zi = 0; zi < 4; zi++) {
+    const zoneItems = byZone[zi];
+    const n = zoneItems.length;
+    if (!n) continue;
+    const inner = zi === 0 ? 16 : zoneR[zi-1] + 8;
+    const outer = zoneR[zi] - 6;
+    const ringWidth = Math.max(8, outer - inner);
+    const offset = zi * 0.5;  // elke ring iets gedraaid — voorkomt straling-langs-radius
+    for (let i = 0; i < n; i++) {
+      const item = zoneItems[i];
+      const angle = (i / n) * Math.PI * 2 + offset;
+      // Rader-rij over 3 sub-rings binnen de zone — krijgt diepere visuele opbouw
+      const ringSlot = i % 3;
+      const dist = inner + ringWidth * (0.20 + ringSlot * 0.30);
+      const x = cx + Math.cos(angle) * dist;
+      const y = cy + Math.sin(angle) * dist;
     const angDiff = ((sweepAngle - angle) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     const lit = angDiff < 0.7 ? Math.max(0, 1 - angDiff / 0.7) : 0;
     const baseSize = item.size || 4;
@@ -1383,8 +1893,11 @@ function renderRadarFrame() {
       }
     }
     c.shadowBlur = 0;
-    // Label: APs (eigen + extern) altijd, clients alleen bij sweep-hover
-    const showLabel = item.labelAlways || item.kind === 'own-ap' || lit > 0.15 || _alertItems.length < 25;
+    // Label-strategie:
+    //   - eigen APs: altijd label
+    //   - externe APs: alleen bij sweep-pass (lit > 0.15)
+    //   - clients: alleen bij sweep-pass
+    const showLabel = item.kind === 'own-ap' || lit > 0.15;
     if (showLabel) {
       c.fillStyle = item.kind === 'external-ap'
         ? `rgba(255,200,170,${0.7 + lit * 0.3})`
@@ -1393,7 +1906,8 @@ function renderRadarFrame() {
       c.textAlign = 'center';
       c.fillText((item.label || item.name || '').slice(0, 18), x, y + baseSize + 11);
     }
-  }
+    }  // einde inner-for (i)
+  }    // einde outer-for (zi)
   // Center label
   const apsCount = _alertItems.filter(i => i.kind === 'own-ap').length;
   const clientsCount = _alertItems.filter(i => i.kind === 'client-ok').length;

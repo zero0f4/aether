@@ -1,7 +1,7 @@
 {
-  "name": "wifi-pulse",
-  "version": "0.2.0",
-  "description": "Live UniFi WiFi visualisatie — organische deeltjeswolk per device, sleepbare topologie, spectrum-analyzer.",
+  "name": "aether",
+  "version": "1.1.0",
+  "description": "AETHER — Wireless Network Intelligence Console for UniFi controllers. RF observability, neighborhood reconnaissance, advisor, time machine, all local.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,16 +11,19 @@
     "node": ">=18"
   },
   "keywords": [
+    "aether",
     "wifi",
     "unifi",
     "udm",
     "ubiquiti",
-    "visualization",
-    "monitoring",
+    "rf-observability",
+    "wireless-intelligence",
     "spectrum-analyzer",
     "wifi-6e",
-    "mcp",
-    "torflow"
+    "wardrive",
+    "wigle",
+    "advisor",
+    "rf-advisor"
   ],
   "author": "zero0f4",
   "license": "MIT",

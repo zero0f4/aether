@@ -60,6 +60,15 @@ function init() {
       rx_bytes  INTEGER
     );
     CREATE INDEX IF NOT EXISTS ix_cs_ts ON client_snapshot(ts);
+
+    CREATE TABLE IF NOT EXISTS notes (
+      key       TEXT PRIMARY KEY,   -- BSSID/MAC
+      kind      TEXT NOT NULL,      -- 'neighbor' | 'client' | 'ap'
+      tag       TEXT,                -- vrij label: 'buurman','onbekend','gevaarlijk'
+      note      TEXT,                -- vrije tekst
+      updated   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_notes_kind ON notes(kind);
   `);
   console.log('[db] history aan — ' + DB_PATH);
   return true;
@@ -248,9 +257,39 @@ function snapshotRange({ from, to, stepSec = 300 } = {}) {
   `).all(stepSec, stepSec, from, to);
 }
 
+// ─── Notities op BSSID/MAC ───
+function noteUpsert({ key, kind = 'neighbor', tag = null, note = null }) {
+  if (!db || !key) return false;
+  db.prepare(`
+    INSERT INTO notes (key, kind, tag, note, updated)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      kind=excluded.kind, tag=excluded.tag, note=excluded.note, updated=excluded.updated
+  `).run(key, kind, tag, note, Math.floor(Date.now()/1000));
+  return true;
+}
+function noteDelete(key) {
+  if (!db || !key) return false;
+  return db.prepare('DELETE FROM notes WHERE key = ?').run(key).changes > 0;
+}
+function noteGet(key) {
+  if (!db || !key) return null;
+  return db.prepare('SELECT * FROM notes WHERE key = ?').get(key) || null;
+}
+function notesAll(kind = null) {
+  if (!db) return {};
+  const rows = kind
+    ? db.prepare('SELECT * FROM notes WHERE kind = ?').all(kind)
+    : db.prepare('SELECT * FROM notes').all();
+  const out = {};
+  for (const r of rows) out[r.key] = r;
+  return out;
+}
+
 module.exports = {
   init, writeSnapshot, pruneOld,
   radioTrend, bandTrend, bandLatest,
   snapshotAt, snapshotRange,
+  noteUpsert, noteDelete, noteGet, notesAll,
   isReady: () => !!db,
 };

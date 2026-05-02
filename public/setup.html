@@ -3,109 +3,376 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WiFi-pulse · setup</title>
+<title>AETHER · Configuration</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  body { overflow: auto; }
-  .setup { max-width: 640px; margin: 60px auto; padding: 36px; background: rgba(13,17,23,0.6); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(12px); position: relative; z-index: 10; }
-  .setup h1 { color: var(--accent); font-size: 22px; margin-bottom: 8px; letter-spacing: 0.05em; }
-  .setup .lead { color: var(--fg-dim); font-size: 13px; line-height: 1.6; margin-bottom: 28px; }
-  .setup h2 { color: var(--fg); font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; margin: 24px 0 10px; font-weight: 700; }
-  .setup ol { padding-left: 22px; color: var(--fg-dim); font-size: 12.5px; line-height: 1.7; margin-bottom: 18px; }
-  .setup ol li { margin-bottom: 4px; }
-  .setup ol code { background: rgba(184,255,208,0.06); padding: 1px 6px; border-radius: 3px; color: var(--accent); font-family: var(--mono); font-size: 11px; }
-  .setup label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--fg-faint); margin: 14px 0 5px; font-weight: 700; }
-  .setup input { width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 7px; color: var(--fg); font-size: 12px; font-family: var(--mono); outline: none; }
-  .setup input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(184,255,208,0.08); }
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .setup .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 28px; }
-  .btn { padding: 10px 22px; border: 1px solid var(--accent-soft); border-radius: 50px; background: rgba(184,255,208,0.08); color: var(--fg); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; transition: all 0.15s; }
-  .btn:hover:not(:disabled) { background: rgba(184,255,208,0.16); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn.primary { background: rgba(184,255,208,0.16); border-color: var(--accent); color: var(--accent); }
-  .msg { padding: 12px 16px; border-radius: 8px; font-size: 12px; margin-top: 14px; line-height: 1.5; }
-  .msg.error { background: rgba(255,140,90,0.1); color: rgba(255,180,140,1); border: 1px solid rgba(255,140,90,0.3); }
-  .msg.ok { background: rgba(184,255,208,0.1); color: var(--accent); border: 1px solid rgba(184,255,208,0.3); }
-  .credit { text-align: center; margin-top: 24px; font-size: 10px; color: var(--fg-faint); }
-  .credit a { color: var(--fg-dim); text-decoration: none; }
-  .credit a:hover { color: var(--accent); }
-  .why { background: rgba(184,255,208,0.04); border-left: 2px solid var(--accent-soft); padding: 10px 14px; border-radius: 0 7px 7px 0; font-size: 11.5px; color: var(--fg-dim); line-height: 1.5; margin: 12px 0 6px; }
+  body { overflow: auto; background: var(--bg); }
+  .setup-shell { max-width: 880px; margin: 40px auto 80px; padding: 0 24px; }
+
+  .setup-brand {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 18px; margin-bottom: 28px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .setup-brand .mark {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 14px var(--accent), 0 0 28px rgba(184,255,208,0.4);
+  }
+  .setup-brand .b-title {
+    font-family: var(--mono); font-size: 18px; font-weight: 700;
+    color: var(--fg); letter-spacing: 0.32em;
+  }
+  .setup-brand .b-sub {
+    font-size: 11px; color: var(--fg-faint);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-left: auto;
+  }
+
+  .setup-hero {
+    padding: 32px 36px 28px;
+    background: linear-gradient(180deg, rgba(184,255,208,0.05), transparent);
+    border: 1px solid var(--accent-soft);
+    border-radius: 14px;
+    margin-bottom: 24px;
+  }
+  .setup-hero h1 {
+    font-family: var(--mono); font-size: 14px; font-weight: 600;
+    letter-spacing: 0.24em; color: var(--accent);
+    margin: 0 0 10px; text-transform: uppercase;
+  }
+  .setup-hero p {
+    color: var(--fg-dim); font-size: 13.5px; line-height: 1.65;
+    margin: 0;
+  }
+
+  .setup-section {
+    background: rgba(13,17,23,0.55);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+  }
+  .setup-section-head {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--rule);
+    background: rgba(0,0,0,0.25);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+    user-select: none;
+  }
+  .setup-section-head:hover { background: rgba(184,255,208,0.04); }
+  .setup-section-head h2 {
+    margin: 0; font-family: var(--mono); font-size: 11px;
+    font-weight: 700; letter-spacing: 0.22em;
+    color: var(--fg); text-transform: uppercase;
+  }
+  .setup-section-head .meta {
+    font-size: 10px; color: var(--fg-faint);
+    font-family: var(--mono); letter-spacing: 0.08em;
+  }
+  .setup-section-head .meta .req { color: var(--warn); margin-left: 6px; }
+  .setup-section-head .meta .ok { color: var(--pass); margin-left: 6px; }
+  .setup-section-head .toggle {
+    color: var(--fg-faint); font-size: 16px; transition: transform 0.2s;
+    margin-left: 12px;
+  }
+  .setup-section.collapsed .setup-section-head .toggle { transform: rotate(-90deg); }
+  .setup-section.collapsed .setup-section-body { display: none; }
+
+  .setup-section-body { padding: 22px 24px 24px; }
+  .setup-section-body .desc {
+    color: var(--fg-dim); font-size: 12px; line-height: 1.6;
+    margin: 0 0 16px;
+  }
+  .setup-section-body .desc strong { color: var(--fg); }
+  .setup-section-body .desc code {
+    background: rgba(184,255,208,0.08); padding: 1px 6px;
+    border-radius: 3px; color: var(--accent);
+    font-family: var(--mono); font-size: 11px;
+  }
+  .setup-section-body .desc a {
+    color: var(--accent); text-decoration: none;
+    border-bottom: 1px dashed var(--accent-soft);
+  }
+  .setup-section-body .desc a:hover { color: var(--fg); border-bottom-color: var(--accent); }
+
+  .field {
+    display: grid; grid-template-columns: 200px 1fr; gap: 16px;
+    align-items: center; padding: 10px 0;
+    border-bottom: 1px dashed rgba(184,255,208,0.05);
+  }
+  .field:last-child { border-bottom: 0; }
+  .field label {
+    font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--fg-faint);
+    font-family: var(--mono); font-weight: 600;
+  }
+  .field label small {
+    display: block; text-transform: none; letter-spacing: 0;
+    color: var(--fg-faint); font-size: 10px; font-weight: 400;
+    font-family: var(--sans); margin-top: 2px; opacity: 0.7;
+  }
+  .field input {
+    width: 100%; padding: 10px 12px;
+    background: rgba(0,0,0,0.35); border: 1px solid var(--rule);
+    border-radius: 6px; color: var(--fg);
+    font-family: var(--mono); font-size: 12px;
+    outline: none; transition: border-color 0.12s, box-shadow 0.12s;
+    box-sizing: border-box;
+  }
+  .field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(184,255,208,0.08);
+  }
+  .field input::placeholder { color: var(--fg-faint); opacity: 0.5; }
+  .field input[readonly] { background: rgba(0,0,0,0.55); color: var(--fg-faint); cursor: not-allowed; }
+
+  .setup-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+    padding: 22px 0 8px;
+    margin-top: 12px;
+    border-top: 1px solid var(--rule);
+  }
+  .btn {
+    padding: 11px 22px; border-radius: 7px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.12s;
+    border: 1px solid var(--rule); background: transparent; color: var(--fg-dim);
+  }
+  .btn:hover:not(:disabled) { background: rgba(184,255,208,0.05); color: var(--fg); border-color: var(--accent-soft); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent); color: var(--bg); border-color: var(--accent);
+  }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.12); background: var(--accent); color: var(--bg); }
+
+  .msg {
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 12px; font-family: var(--mono);
+    margin-top: 14px; line-height: 1.5;
+    border: 1px solid transparent;
+  }
+  .msg.ok   { background: rgba(122,255,182,0.08); color: var(--pass); border-color: rgba(122,255,182,0.3); }
+  .msg.err  { background: rgba(255,77,109,0.08); color: var(--crit); border-color: rgba(255,77,109,0.3); }
+  .msg.warn { background: rgba(255,196,107,0.08); color: var(--warn); border-color: rgba(255,196,107,0.3); }
+
+  .setup-footer {
+    text-align: center; margin-top: 28px;
+    font-size: 10px; color: var(--fg-faint);
+    font-family: var(--mono); letter-spacing: 0.08em;
+  }
+  .setup-footer a { color: var(--fg-dim); text-decoration: none; margin: 0 4px; }
+  .setup-footer a:hover { color: var(--accent); }
+
+  @media (max-width: 720px) {
+    .field { grid-template-columns: 1fr; gap: 6px; }
+    .setup-hero { padding: 22px 20px; }
+  }
 </style>
 </head>
 <body>
-<div class="setup">
-  <h1>🌊 WiFi-pulse · setup</h1>
-  <p class="lead">Welkom! Eenmalig configureren — daarna draait WiFi-pulse continu en zie je live je netwerk.</p>
+<div class="setup-shell">
 
-  <h2>Voor je begint</h2>
-  <ol>
-    <li>Log in op je <strong>UniFi controller</strong> (UDM, UDR, Cloud Key, …).</li>
-    <li>Ga naar <strong>Settings → Admins &amp; Users → Create New Admin</strong>.</li>
-    <li>Maak een <strong>local-only user</strong> aan met rol <code>Read Only</code>. Geen e-mail nodig.</li>
-    <li>Onthoud de gebruikersnaam + wachtwoord — invullen hieronder.</li>
-  </ol>
+  <div class="setup-brand">
+    <span class="mark"></span>
+    <span class="b-title">AETHER</span>
+    <span class="b-sub">configuration</span>
+  </div>
 
-  <div class="why">💡 <strong>Waarom een aparte read-only user?</strong> WiFi-pulse heeft alleen leesrechten nodig. Je hoofd-admin-account is niet nodig — meer veiligheid, en als deze user later compromiseert kan hij niets aanpassen.</div>
+  <div class="setup-hero">
+    <h1>Welcome &middot; first-run setup</h1>
+    <p>AETHER is een passief reconnaissance- en observability-platform voor je UniFi-netwerk. Configureer hieronder de UniFi-controller en optionele intel-bronnen. Alle gegevens worden lokaal opgeslagen in <code>.env</code> (chmod&nbsp;600); niets wordt naar derden verzonden behalve via expliciete intel-koppelingen die jij activeert.</p>
+  </div>
 
-  <h2>Configuratie</h2>
-  <form id="setup-form" onsubmit="return false">
-    <label>UniFi controller IP <span style="color:var(--fg-faint);font-size:10px;text-transform:none;letter-spacing:0">(IP-adres van je UDM/UDR/Cloud Key)</span></label>
-    <input id="udm-host" name="UDM_HOST" placeholder="bv. 10.0.0.1" required>
+  <form id="setup-form" onsubmit="event.preventDefault(); saveAndStart(); return false">
 
-    <div class="row2">
-      <div>
-        <label>Gebruikersnaam</label>
-        <input id="udm-user" name="UDM_USER" placeholder="readonly-user" autocomplete="username" required>
+    <!-- ─── UniFi connection ─── -->
+    <section class="setup-section" data-section="unifi">
+      <div class="setup-section-head" onclick="toggleSection(this)">
+        <h2>UniFi controller <span class="meta"><span class="req" id="meta-unifi">vereist</span></span></h2>
+        <span class="toggle">▾</span>
       </div>
-      <div>
-        <label>Wachtwoord</label>
-        <input id="udm-pass" name="UDM_PASS" type="password" autocomplete="current-password" required>
+      <div class="setup-section-body">
+        <div class="desc">
+          Maak in je UniFi-controller een <strong>local read-only admin</strong>: <code>Settings → Admins &amp; Users → Create New Admin</code>, kies <em>Restrict to local access only</em> + rol <code>View Only</code>. Met read-only kan AETHER alleen lezen — geen wijzigingen mogelijk.
+        </div>
+
+        <div class="field">
+          <label>Controller-host
+            <small>IP of hostname van UDM/UDR/UCK</small>
+          </label>
+          <input id="udm-host" name="UDM_HOST" placeholder="bv. 10.0.0.1 of unifi.local" required>
+        </div>
+
+        <div class="field">
+          <label>Gebruikersnaam
+            <small>read-only local admin</small>
+          </label>
+          <input id="udm-user" name="UDM_USER" placeholder="aether-readonly" autocomplete="username" required>
+        </div>
+
+        <div class="field">
+          <label>Wachtwoord</label>
+          <input id="udm-pass" name="UDM_PASS" type="password" autocomplete="current-password">
+        </div>
+
+        <div class="field">
+          <label>Site-naam
+            <small>standaard <code>default</code></small>
+          </label>
+          <input id="udm-site" name="UDM_SITE" placeholder="default" value="default">
+        </div>
+
+        <div class="setup-actions">
+          <button type="button" class="btn" onclick="testConnection()" id="btn-test">test verbinding</button>
+        </div>
+        <div id="msg-unifi"></div>
       </div>
+    </section>
+
+    <!-- ─── Server / data retention ─── -->
+    <section class="setup-section collapsed" data-section="server">
+      <div class="setup-section-head" onclick="toggleSection(this)">
+        <h2>Server &amp; data-retentie <span class="meta">optioneel</span></h2>
+        <span class="toggle">▾</span>
+      </div>
+      <div class="setup-section-body">
+        <div class="desc">Tweede graads: poll-interval en hoelang historische data wordt bewaard in de lokale SQLite-database. Standaardwaarden zijn voor de meeste setups prima.</div>
+
+        <div class="field">
+          <label>HTTP-poort
+            <small>standaard 3033 — herstart vereist</small>
+          </label>
+          <input id="port" name="PORT" placeholder="3033" value="3033">
+        </div>
+        <div class="field">
+          <label>Poll-interval (ms)
+            <small>UniFi pollen elke N ms (1000–5000)</small>
+          </label>
+          <input id="poll-ms" name="POLL_MS" placeholder="1500" value="1500">
+        </div>
+        <div class="field">
+          <label>Retentie (dagen)
+            <small>hoelang historie in <code>data.db</code> bewaren</small>
+          </label>
+          <input id="retention" name="RETENTION_DAYS" placeholder="7" value="7">
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── WiGLE ─── -->
+    <section class="setup-section collapsed" data-section="wigle">
+      <div class="setup-section-head" onclick="toggleSection(this)">
+        <h2>WiGLE.net wardrive lookup <span class="meta" id="meta-wigle">optioneel</span></h2>
+        <span class="toggle">▾</span>
+      </div>
+      <div class="setup-section-body">
+        <div class="desc">
+          Met WiGLE-credentials kan AETHER elke neighbor-BSSID opzoeken in de wereldwijde wardrive-database — locatie, eerste/laatste-gezien, SSID-historie. Maak een gratis account aan op <a href="https://wigle.net/account" target="_blank" rel="noopener">wigle.net/account</a> → <em>Show My Token</em> → de "Encoded for use" base64-string decoderen → de <code>userId:apiToken</code> hieronder invullen.
+        </div>
+
+        <div class="field">
+          <label>WiGLE userId
+            <small>eerste deel van de token (vóór de <code>:</code>)</small>
+          </label>
+          <input id="wigle-user" name="WIGLE_USER" placeholder="AIDxxxxxxxx…" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>WiGLE API-token
+            <small>tweede deel van de token (ná de <code>:</code>)</small>
+          </label>
+          <input id="wigle-key" name="WIGLE_KEY" type="password" placeholder="hexadecimale token" autocomplete="off">
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Auth ─── -->
+    <section class="setup-section collapsed" data-section="auth">
+      <div class="setup-section-head" onclick="toggleSection(this)">
+        <h2>Toegangscontrole <span class="meta" id="meta-auth">optioneel</span></h2>
+        <span class="toggle">▾</span>
+      </div>
+      <div class="setup-section-body">
+        <div class="desc">
+          AETHER draait standaard <strong>open op localhost</strong>. Wil je het buiten je Mac toegankelijk maken (reverse-proxy / tailscale / LAN), zet dan tokens. Lege waarde = open. Tokens stuur je mee als <code>?token=…</code> of <code>Authorization: Bearer …</code>.
+        </div>
+
+        <div class="field">
+          <label>Full-access token
+            <small>kan alles, ook history-controls</small>
+          </label>
+          <input id="auth-token" name="AUTH_TOKEN" type="password" placeholder="bv. 32 random chars" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Read-only token
+            <small>alleen viewing, geen actions</small>
+          </label>
+          <input id="readonly-token" name="READONLY_TOKEN" type="password" placeholder="bv. 32 random chars" autocomplete="off">
+        </div>
+        <div class="setup-actions" style="border:0;padding-top:8px">
+          <button type="button" class="btn" onclick="genTokens()">genereer tokens</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Final actions ─── -->
+    <div class="setup-actions">
+      <button type="button" class="btn" onclick="location.href='/'">annuleer</button>
+      <button type="submit" class="btn primary" id="btn-save">opslaan &amp; herstarten</button>
     </div>
-
-    <div class="row2">
-      <div>
-        <label>Site-naam</label>
-        <input id="udm-site" name="UDM_SITE" placeholder="default" value="default">
-      </div>
-      <div>
-        <label>Poort (optioneel)</label>
-        <input id="port" name="PORT" placeholder="3033" value="3033">
-      </div>
-    </div>
-
     <div id="msg"></div>
 
-    <div class="actions">
-      <button type="button" class="btn" onclick="testConnection()" id="btn-test">Test verbinding</button>
-      <button type="submit" class="btn primary" onclick="saveAndStart()" id="btn-save">Opslaan &amp; starten</button>
-    </div>
   </form>
 
-  <div class="credit">
-    Built with <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> by
-    <a href="https://github.com/zero0f4" target="_blank" rel="noopener">zero0f4</a>
-    · <a href="https://github.com/zero0f4/wifi-pulse" target="_blank" rel="noopener">source</a>
+  <div class="setup-footer">
+    AETHER &middot; <a href="https://github.com/zero0f4/wifi-pulse" target="_blank" rel="noopener">source</a>
+    &middot; <a href="/" >back to console</a>
   </div>
+
 </div>
 
 <script>
-// Pre-fill bestaande config (handig wanneer je via ⚙ uit de hoofd-UI komt)
+function toggleSection(head) {
+  head.parentElement.classList.toggle('collapsed');
+}
+
 (async () => {
   try {
     const r = await fetch('/api/setup/current');
     const j = await r.json();
-    if (j.ok) {
-      if (j.UDM_HOST) document.getElementById('udm-host').value = j.UDM_HOST;
-      if (j.UDM_USER) document.getElementById('udm-user').value = j.UDM_USER;
-      if (j.UDM_SITE) document.getElementById('udm-site').value = j.UDM_SITE;
-      if (j.PORT) document.getElementById('port').value = j.PORT;
-      if (j.hasPassword) {
-        document.getElementById('udm-pass').placeholder = '••••••••  (laat leeg om huidige te behouden)';
-        document.getElementById('udm-pass').required = false;
-        document.querySelector('h1').innerHTML = '🌊 WiFi-pulse · instellingen';
-        document.querySelector('.lead').textContent = 'Wijzig de configuratie. Laat het wachtwoord leeg om de huidige te behouden.';
-      }
+    if (!j.ok) return;
+    const set = (id, v) => { if (v != null) document.getElementById(id).value = v; };
+    set('udm-host', j.UDM_HOST);
+    set('udm-user', j.UDM_USER);
+    set('udm-site', j.UDM_SITE);
+    set('port', j.PORT);
+    set('poll-ms', j.POLL_MS);
+    set('retention', j.RETENTION_DAYS);
+    set('wigle-user', j.WIGLE_USER);
+    if (j.hasPassword) {
+      const e = document.getElementById('udm-pass');
+      e.placeholder = '••••••••  (laat leeg om huidige te behouden)';
+      e.required = false;
+      document.getElementById('meta-unifi').textContent = 'geconfigureerd';
+      document.getElementById('meta-unifi').classList.remove('req');
+      document.getElementById('meta-unifi').classList.add('ok');
+    }
+    if (j.hasWigleKey) {
+      const e = document.getElementById('wigle-key');
+      e.placeholder = '••••••••  (huidige behouden)';
+      const m = document.getElementById('meta-wigle');
+      m.textContent = 'actief';
+      m.classList.add('ok');
+    }
+    if (j.hasAuthToken || j.hasReadonlyToken) {
+      const m = document.getElementById('meta-auth');
+      m.textContent = 'tokens actief';
+      m.classList.add('ok');
+      if (j.hasAuthToken) document.getElementById('auth-token').placeholder = '••••••••';
+      if (j.hasReadonlyToken) document.getElementById('readonly-token').placeholder = '••••••••';
     }
   } catch {}
 })();
@@ -116,39 +383,58 @@ function getValues() {
     UDM_USER: document.getElementById('udm-user').value.trim(),
     UDM_PASS: document.getElementById('udm-pass').value,
     UDM_SITE: document.getElementById('udm-site').value.trim() || 'default',
-    PORT: document.getElementById('port').value.trim() || '3033'
+    PORT: document.getElementById('port').value.trim() || '3033',
+    POLL_MS: document.getElementById('poll-ms').value.trim() || '1500',
+    RETENTION_DAYS: document.getElementById('retention').value.trim() || '7',
+    WIGLE_USER: document.getElementById('wigle-user').value.trim(),
+    WIGLE_KEY: document.getElementById('wigle-key').value,
+    AUTH_TOKEN: document.getElementById('auth-token').value,
+    READONLY_TOKEN: document.getElementById('readonly-token').value,
   };
 }
-function showMsg(text, kind) {
-  const el = document.getElementById('msg');
+
+function showMsg(text, kind, where = 'msg') {
+  const el = document.getElementById(where);
+  if (!el) return;
   el.className = 'msg ' + (kind || 'ok');
   el.textContent = text;
 }
+
 async function testConnection() {
   const btn = document.getElementById('btn-test');
-  btn.disabled = true; btn.textContent = '⏳ test…';
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'test…';
   try {
     const r = await fetch('/api/setup/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(getValues()) });
     const j = await r.json();
-    if (j.ok) showMsg('✓ Verbinding geslaagd · ' + (j.message || 'controller bereikt'), 'ok');
-    else showMsg('✗ ' + (j.error || 'onbekende fout'), 'error');
-  } catch (e) { showMsg('✗ ' + e.message, 'error'); }
-  btn.disabled = false; btn.textContent = 'Test verbinding';
+    if (j.ok) showMsg('✓ Verbinding geslaagd · ' + (j.message || 'controller bereikt'), 'ok', 'msg-unifi');
+    else showMsg('✗ ' + (j.error || 'onbekende fout'), 'err', 'msg-unifi');
+  } catch (e) { showMsg('✗ ' + e.message, 'err', 'msg-unifi'); }
+  btn.disabled = false; btn.textContent = orig;
 }
+
 async function saveAndStart() {
   const btn = document.getElementById('btn-save');
-  btn.disabled = true; btn.textContent = '⏳ opslaan…';
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'opslaan…';
   try {
     const r = await fetch('/api/setup/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(getValues()) });
     const j = await r.json();
     if (j.ok) {
-      showMsg('✓ Opgeslagen. WiFi-pulse start nu — refresh over enkele seconden.', 'ok');
+      showMsg('✓ Configuratie opgeslagen. AETHER wordt herstart — refresh over enkele seconden.', 'ok');
       setTimeout(() => location.href = '/', 4000);
     } else {
-      showMsg('✗ ' + (j.error || 'opslaan mislukt'), 'error');
+      showMsg('✗ ' + (j.error || 'opslaan mislukt'), 'err');
     }
-  } catch (e) { showMsg('✗ ' + e.message, 'error'); }
-  btn.disabled = false; btn.textContent = 'Opslaan & starten';
+  } catch (e) { showMsg('✗ ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = orig;
+}
+
+function genTokens() {
+  const rnd = (n) => {
+    const a = new Uint8Array(n); crypto.getRandomValues(a);
+    return Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
+  };
+  document.getElementById('auth-token').value = rnd(24);
+  document.getElementById('readonly-token').value = rnd(24);
 }
 </script>
 </body>
