@@ -146,28 +146,28 @@
     </div>
   </section>
 
-  <section class="recon-page" id="recon-page">
+  <section class="recon-page page" id="recon-page">
     <button class="back-btn" onclick="setTab('pulse')" title="terug naar Pulse">
       <span class="back-arrow">‹</span><span class="back-label">PULSE</span>
     </button>
-    <div class="recon-head">
-      <h2 class="recon-title">RECON · alle APs in zicht</h2>
-      <div class="recon-meta">
+    <div class="page-head">
+      <h2 class="page-title">RECON · alles in zicht</h2>
+      <div class="page-meta">
         <span><b id="recon-count-own">—</b> eigen APs</span>
         <span><b id="recon-count-ext">—</b> extern</span>
         <span><b id="recon-count-dist">—</b> storend</span>
         <span><b id="recon-count-cli">—</b> clients</span>
       </div>
-      <div class="recon-controls">
-        <input type="search" id="recon-search" placeholder="🔍 zoek SSID / BSSID / kanaal" autocomplete="off">
+      <div class="toolbar">
+        <input type="search" id="recon-search" placeholder="🔍 zoek SSID / BSSID / kanaal / naam" autocomplete="off">
         <select id="recon-band-filter">
           <option value="">alle banden</option>
           <option value="2.4">2.4 GHz</option>
           <option value="5">5 GHz</option>
           <option value="6">6 GHz</option>
         </select>
-        <label class="recon-chip"><input type="checkbox" id="recon-only-disturbing"> alleen storend</label>
-        <label class="recon-chip"><input type="checkbox" id="recon-only-own"> alleen eigen</label>
+        <label class="tag tag--btn"><input type="checkbox" id="recon-only-disturbing" style="margin-right:4px"> alleen storend</label>
+        <label class="tag tag--btn"><input type="checkbox" id="recon-only-own" style="margin-right:4px"> alleen eigen</label>
       </div>
     </div>
     <div class="recon-body">
@@ -178,7 +178,7 @@
       <section class="recon-section">
         <h3>EXTERNE APs (neighbors)</h3>
         <div class="recon-table-wrap">
-          <table class="recon-table">
+          <table class="tbl recon-table">
             <thead>
               <tr>
                 <th>SSID</th>
@@ -199,7 +199,7 @@
       <section class="recon-section">
         <h3>CLIENTS · alle wireless clients</h3>
         <div class="recon-table-wrap">
-          <table class="recon-table">
+          <table class="tbl recon-table">
             <thead>
               <tr>
                 <th>Naam / hostname</th>
