@@ -3676,3 +3676,273 @@ try { setupAllStatsCanvases(); } catch (e) { console.error('hidpi init:', e); }
 try { setLang(prefs.lang || 'nl'); } catch (e) { console.error('setLang init:', e); }
 try { setTab(prefs.tab || 'pulse'); } catch (e) { console.error('setTab init:', e); }
 try { refreshChannels(); } catch (e) { console.error('refreshChannels init:', e); }
+
+// ═══════════════════════════════════════════════════════════════════
+// TIME MACHINE — sleep door netwerktijd (uitsluitend op Pulse-tab)
+// ═══════════════════════════════════════════════════════════════════
+(function timeMachine() {
+  const root = document.getElementById('time-machine');
+  const toggleBtn = document.getElementById('tm-toggle');
+  if (!root || !toggleBtn) return;
+
+  const slider = document.getElementById('tm-slider');
+  const track  = document.getElementById('tm-track');
+  const cursorEl = document.getElementById('tm-cursor');
+  const summaryEl = document.getElementById('tm-summary');
+
+  const TM = {
+    open: false,
+    rangeFrom: 0,
+    rangeTo: 0,
+    currentTs: 0,           // null = live
+    isLive: true,
+    isPlaying: false,
+    rangeData: [],          // [{bucket,c_24,c_5,c_6,total},...]
+    playSpeed: 60,          // sec per second of real-time
+  };
+
+  function fmtTs(ts) {
+    if (!ts) return '— LIVE —';
+    const d = new Date(ts * 1000);
+    const ago = Math.round((Date.now()/1000 - ts) / 60);
+    const time = d.toLocaleString('nl-NL', { hour: '2-digit', minute: '2-digit', day:'2-digit', month:'short' });
+    return `${time} · ${ago>0 ? ago+'m geleden' : 'nu'}`;
+  }
+
+  async function loadRange() {
+    const to = Math.floor(Date.now() / 1000);
+    const from = to - 24*3600;
+    TM.rangeFrom = from;
+    TM.rangeTo = to;
+    try {
+      const r = await fetch(`/api/timetravel/range?from=${from}&to=${to}&step=300`);
+      const j = await r.json();
+      if (!j.ok) return;
+      TM.rangeData = j.range || [];
+      drawTrack();
+    } catch (e) { console.error('[tm] range:', e); }
+  }
+
+  function drawTrack() {
+    if (!track) return;
+    const c = track.getContext('2d');
+    const w = track.clientWidth || 1200, h = track.clientHeight || 36;
+    const dpr = window.devicePixelRatio || 1;
+    track.width = w * dpr; track.height = h * dpr;
+    c.scale(dpr, dpr);
+    c.clearRect(0, 0, w, h);
+
+    // achtergrond-grid
+    c.fillStyle = 'rgba(0,0,0,0.3)';
+    c.fillRect(0, 0, w, h);
+
+    if (!TM.rangeData.length) {
+      c.fillStyle = 'rgba(255,255,255,0.25)';
+      c.font = '11px ui-monospace, monospace';
+      c.textAlign = 'center';
+      c.fillText('geen geschiedenis (start verzameling — komt over enkele minuten)', w/2, h/2 + 4);
+      return;
+    }
+
+    const span = TM.rangeTo - TM.rangeFrom;
+    const maxClients = Math.max(1, ...TM.rangeData.map(r => r.total || 0));
+
+    // gestapelde area-chart: 6 GHz, 5 GHz, 2.4 GHz
+    const stack = (key, color, baseFn) => {
+      c.fillStyle = color;
+      c.beginPath();
+      let firstX = null;
+      TM.rangeData.forEach((r, i) => {
+        const tFrac = (r.bucket - TM.rangeFrom) / span;
+        const x = tFrac * w;
+        const base = baseFn(r);
+        const y = h - 2 - ((base / maxClients) * (h - 4));
+        if (i === 0) { c.moveTo(x, h); firstX = x; }
+        c.lineTo(x, y);
+      });
+      // sluit pad af
+      const last = TM.rangeData[TM.rangeData.length - 1];
+      const lastX = ((last.bucket - TM.rangeFrom) / span) * w;
+      c.lineTo(lastX, h);
+      c.closePath();
+      c.fill();
+    };
+
+    // base: cumulatief (6+5+24)
+    stack('total', 'rgba(200,245,214,0.30)', r => (r.c_6||0) + (r.c_5||0) + (r.c_24||0));
+    stack('c5+24', 'rgba(156,216,255,0.30)', r => (r.c_5||0) + (r.c_24||0));
+    stack('c24',   'rgba(255,170,110,0.30)', r => (r.c_24||0));
+
+    // uur-tickjes
+    c.strokeStyle = 'rgba(255,255,255,0.12)';
+    c.lineWidth = 1; c.font = '8px ui-monospace, monospace';
+    c.fillStyle = 'rgba(255,255,255,0.40)';
+    c.textAlign = 'center';
+    for (let t = TM.rangeFrom; t <= TM.rangeTo; t += 3600) {
+      const x = ((t - TM.rangeFrom) / span) * w;
+      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke();
+      const d = new Date(t * 1000);
+      if (d.getHours() % 6 === 0) {
+        c.fillText(d.getHours()+'h', x, 10);
+      }
+    }
+    // huidige cursor-lijn
+    if (TM.currentTs && !TM.isLive) {
+      const cx = ((TM.currentTs - TM.rangeFrom) / span) * w;
+      c.strokeStyle = 'rgba(255,170,110,0.9)';
+      c.lineWidth = 2;
+      c.beginPath(); c.moveTo(cx, 0); c.lineTo(cx, h); c.stroke();
+    }
+  }
+
+  async function loadSnapshot(ts) {
+    try {
+      const r = await fetch(`/api/timetravel?ts=${ts}&window=180`);
+      const j = await r.json();
+      if (!j.ok || !j.snapshot) return;
+      const snap = j.snapshot;
+      summaryEl.textContent = `${snap.foundClients} clients · ${snap.foundRadios} radios · band: ${snap.band ? `${snap.band.c_24}/${snap.band.c_5}/${snap.band.c_6}` : '—'}`;
+      // Replay: vul stations + apsMap + apChannels — light-touch, alleen voor visualisatie
+      replayState(snap);
+    } catch (e) { console.error('[tm] snapshot:', e); }
+  }
+
+  function replayState(snap) {
+    // Verwijder alle huidige stations
+    if (typeof stations !== 'undefined') stations.clear();
+    // Vul met snapshot-clients
+    for (const c of snap.clients || []) {
+      stations.set(c.mac, {
+        id: c.mac,
+        name: c.name || c.mac.slice(-5),
+        rssi: c.rssi || -90,
+        signal: c.rssi || -90,
+        ap: c.ap_mac,
+        ssid: c.ssid,
+        band: c.band === '6' ? '6e' : c.band === '2.4' ? 'ng' : 'na',
+        channel: c.channel,
+        tx: c.tx_rate, rx: c.rx_rate,
+        txBytes: c.tx_bytes, rxBytes: c.rx_bytes,
+        x: 0, y: 0, vx: 0, vy: 0, _replay: true,
+      });
+    }
+    // Update apChannels uit radios
+    if (typeof apChannels !== 'undefined') {
+      for (const r of snap.radios || []) {
+        if (!apChannels[r.ap_mac]) {
+          apChannels[r.ap_mac] = { name: r.ap_name || r.ap_mac, channels: [] };
+        }
+        const ap = apChannels[r.ap_mac];
+        // Vervang radio-entry per band
+        ap.channels = (ap.channels || []).filter(rr => bandFromRadio(rr.radio_name || rr.band) !== r.band);
+        ap.channels.push({
+          radio_name: r.band === '2.4' ? 'wifi0' : r.band === '5' ? 'wifi1' : 'wifi2',
+          band: r.band === '6' ? '6e' : r.band === '2.4' ? 'ng' : 'na',
+          channel: r.channel, ht: r.ht,
+          cu_total: r.cu_total, cu_self_tx: r.cu_self_tx, cu_self_rx: r.cu_self_rx,
+          n_users: r.clients, tx_power: r.tx_power,
+        });
+      }
+    }
+    if (typeof refreshChannels === 'function') refreshChannels();
+  }
+
+  function setOpen(open) {
+    TM.open = open;
+    document.body.classList.toggle('tm-open', open);
+    if (open) {
+      loadRange();
+      // refresh elke 60s
+      if (!TM._rangeTimer) TM._rangeTimer = setInterval(loadRange, 60_000);
+    } else {
+      goLive();
+      if (TM._rangeTimer) { clearInterval(TM._rangeTimer); TM._rangeTimer = null; }
+    }
+  }
+
+  function setSliderToTs(ts) {
+    if (!TM.rangeFrom || !TM.rangeTo) return;
+    const span = TM.rangeTo - TM.rangeFrom;
+    if (span <= 0) return;
+    slider.value = Math.round(((ts - TM.rangeFrom) / span) * 1000);
+  }
+
+  function tsFromSlider() {
+    const span = TM.rangeTo - TM.rangeFrom;
+    const t = TM.rangeFrom + (Number(slider.value) / 1000) * span;
+    return Math.round(t);
+  }
+
+  function goLive() {
+    TM.isLive = true;
+    TM.currentTs = 0;
+    TM.isPlaying = false;
+    document.body.classList.add('tm-live');
+    document.body.classList.remove('tm-playing');
+    cursorEl.textContent = fmtTs(null);
+    slider.value = 1000;
+    drawTrack();
+    // Triggers: WS-stream zal weer normaal de stations vullen
+  }
+
+  function gotoTs(ts) {
+    TM.isLive = false;
+    TM.currentTs = ts;
+    document.body.classList.remove('tm-live');
+    cursorEl.textContent = fmtTs(ts);
+    setSliderToTs(ts);
+    loadSnapshot(ts);
+    drawTrack();
+  }
+
+  function step(deltaSec) {
+    let ts = TM.isLive ? Math.floor(Date.now()/1000) : TM.currentTs;
+    ts += deltaSec;
+    if (ts < TM.rangeFrom) ts = TM.rangeFrom;
+    if (ts > Math.floor(Date.now()/1000)) { goLive(); return; }
+    gotoTs(ts);
+  }
+
+  // Slider-events
+  slider.addEventListener('input', () => {
+    TM.isPlaying = false;
+    document.body.classList.remove('tm-playing');
+    const t = tsFromSlider();
+    if (Math.abs(t - Math.floor(Date.now()/1000)) < 60) goLive();
+    else gotoTs(t);
+  });
+
+  // Knoppen
+  document.getElementById('tm-toggle').addEventListener('click', () => setOpen(true));
+  document.getElementById('tm-close').addEventListener('click', () => setOpen(false));
+  document.getElementById('tm-back-1m').addEventListener('click', () => step(-60));
+  document.getElementById('tm-fwd-1m').addEventListener('click', () => step(60));
+  document.getElementById('tm-back-1h').addEventListener('click', () => step(-3600));
+  document.getElementById('tm-fwd-1h').addEventListener('click', () => step(3600));
+  document.getElementById('tm-live').addEventListener('click', goLive);
+  document.getElementById('tm-play').addEventListener('click', () => {
+    if (TM.isLive) gotoTs(Math.floor(Date.now()/1000) - 3600);
+    TM.isPlaying = !TM.isPlaying;
+    document.body.classList.toggle('tm-playing', TM.isPlaying);
+  });
+
+  // Playback-loop: elke seconde +playSpeed sec
+  setInterval(() => {
+    if (!TM.isPlaying) return;
+    step(TM.playSpeed);
+  }, 1000);
+
+  // Keyboard
+  document.addEventListener('keydown', ev => {
+    if (!TM.open) return;
+    if (ev.target.matches('input, textarea, select')) return;
+    if (ev.key === 'ArrowLeft')  step(ev.shiftKey ? -3600 : -60);
+    if (ev.key === 'ArrowRight') step(ev.shiftKey ?  3600 :  60);
+    if (ev.key === ' ') { ev.preventDefault(); document.getElementById('tm-play').click(); }
+    if (ev.key === 'Escape') setOpen(false);
+    if (ev.key === 'l' || ev.key === 'L') goLive();
+  });
+
+  // Init: live
+  goLive();
+})();

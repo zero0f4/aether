@@ -44,6 +44,22 @@ function init() {
       c_6       INTEGER NOT NULL DEFAULT 0,
       total     INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS client_snapshot (
+      ts        INTEGER NOT NULL,
+      mac       TEXT NOT NULL,
+      name      TEXT,
+      ap_mac    TEXT,
+      ssid      TEXT,
+      band      TEXT,
+      channel   INTEGER,
+      rssi      INTEGER,
+      tx_rate   INTEGER,
+      rx_rate   INTEGER,
+      tx_bytes  INTEGER,
+      rx_bytes  INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS ix_cs_ts ON client_snapshot(ts);
   `);
   console.log('[db] history aan — ' + DB_PATH);
   return true;
@@ -91,6 +107,24 @@ function writeSnapshot(apChannels, clients) {
   });
   try { tx(); } catch (e) { console.error('[db] write radio:', e.message); }
 
+  // Client-snapshot
+  const insC = db.prepare(`
+    INSERT INTO client_snapshot (ts, mac, name, ap_mac, ssid, band, channel, rssi, tx_rate, rx_rate, tx_bytes, rx_bytes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const tx2 = db.transaction(() => {
+    for (const c of clients || []) {
+      const radio = String(c.radio || c.band || '').toLowerCase();
+      const band = (radio === '6e' || radio === '6g' || radio.includes('_6')) ? '6'
+                 : (radio === 'ng' ? '2.4'
+                 : (radio === 'na' ? '5' : null));
+      insC.run(ts, c.id || '', c.name || null, c.ap || null, c.ssid || null,
+        band, c.channel ?? null, c.rssi ?? null,
+        c.tx ?? null, c.rx ?? null, c.txBytes ?? null, c.rxBytes ?? null);
+    }
+  });
+  try { tx2(); } catch (e) { console.error('[db] write clients:', e.message); }
+
   // Band-aggregatie. Voorkeur: het eenduidige `radio`-veld ('ng'/'na'/'6e').
   // Fallback op `band` (radio_proto) voor oudere shape-payloads.
   let c24=0, c5=0, c6=0;
@@ -113,10 +147,11 @@ function pruneOld() {
   if (!db) return;
   const cutoff = Math.floor(Date.now() / 1000) - RETENTION_DAYS * 86400;
   try {
-    const r1 = db.prepare('DELETE FROM radio_stats   WHERE ts < ?').run(cutoff);
-    const r2 = db.prepare('DELETE FROM band_snapshot WHERE ts < ?').run(cutoff);
-    if (r1.changes || r2.changes) {
-      console.log(`[db] prune: ${r1.changes} radio + ${r2.changes} band rows ouder dan ${RETENTION_DAYS}d`);
+    const r1 = db.prepare('DELETE FROM radio_stats     WHERE ts < ?').run(cutoff);
+    const r2 = db.prepare('DELETE FROM band_snapshot   WHERE ts < ?').run(cutoff);
+    const r3 = db.prepare('DELETE FROM client_snapshot WHERE ts < ?').run(cutoff);
+    if (r1.changes || r2.changes || r3.changes) {
+      console.log(`[db] prune: ${r1.changes} radio + ${r2.changes} band + ${r3.changes} client rows ouder dan ${RETENTION_DAYS}d`);
     }
   } catch (e) { console.error('[db] prune:', e.message); }
 }
@@ -158,8 +193,64 @@ function bandLatest() {
   `).get() || null;
 }
 
+// ── Time Machine: reconstruct full state at given ts ──
+function snapshotAt({ ts, windowSec = 90 } = {}) {
+  if (!db) return null;
+  if (!ts) ts = Math.floor(Date.now() / 1000);
+  // Vind dichtstbijzijnde snapshot binnen ±windowSec
+  const lo = ts - windowSec, hi = ts + windowSec;
+  // Radio stats: voor ELKE AP-radio, kies de rij met ts dichtst bij target
+  const radios = db.prepare(`
+    SELECT r.* FROM radio_stats r
+    INNER JOIN (
+      SELECT ap_mac, band, MIN(ABS(ts - ?)) AS dt
+      FROM radio_stats
+      WHERE ts BETWEEN ? AND ?
+      GROUP BY ap_mac, band
+    ) m ON m.ap_mac = r.ap_mac AND m.band = r.band AND ABS(r.ts - ?) = m.dt
+  `).all(ts, lo, hi, ts);
+
+  const clients = db.prepare(`
+    SELECT c.* FROM client_snapshot c
+    INNER JOIN (
+      SELECT mac, MIN(ABS(ts - ?)) AS dt
+      FROM client_snapshot
+      WHERE ts BETWEEN ? AND ?
+      GROUP BY mac
+    ) m ON m.mac = c.mac AND ABS(c.ts - ?) = m.dt
+  `).all(ts, lo, hi, ts);
+
+  const band = db.prepare(`
+    SELECT * FROM band_snapshot
+    WHERE ABS(ts - ?) <= ?
+    ORDER BY ABS(ts - ?) ASC
+    LIMIT 1
+  `).get(ts, windowSec, ts) || null;
+
+  return { ts, radios, clients, band, foundClients: clients.length, foundRadios: radios.length };
+}
+
+function snapshotRange({ from, to, stepSec = 300 } = {}) {
+  if (!db) return [];
+  if (!from || !to) {
+    to = Math.floor(Date.now() / 1000);
+    from = to - 86400;
+  }
+  // Per stepSec-bucket de bandsnapshot + totaal aantal clients/aps
+  return db.prepare(`
+    SELECT
+      (ts / ?) * ? AS bucket,
+      AVG(c_24) AS c_24, AVG(c_5) AS c_5, AVG(c_6) AS c_6, AVG(total) AS total
+    FROM band_snapshot
+    WHERE ts BETWEEN ? AND ?
+    GROUP BY bucket
+    ORDER BY bucket ASC
+  `).all(stepSec, stepSec, from, to);
+}
+
 module.exports = {
   init, writeSnapshot, pruneOld,
   radioTrend, bandTrend, bandLatest,
+  snapshotAt, snapshotRange,
   isReady: () => !!db,
 };

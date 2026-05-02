@@ -292,6 +292,36 @@
     </div>
   </section>
 
+  <!-- Time Machine: tijdslider met playback-controls. Default verborgen. -->
+  <div class="time-machine" id="time-machine">
+    <div class="tm-head">
+      <span class="tm-title">⏱ TIME MACHINE</span>
+      <span class="tm-cursor" id="tm-cursor">— LIVE —</span>
+      <div class="tm-controls">
+        <button class="tm-btn" id="tm-back-1h" title="−1 uur">⏮</button>
+        <button class="tm-btn" id="tm-back-1m" title="−1 min">«</button>
+        <button class="tm-btn tm-play" id="tm-play" title="play/pause">▶</button>
+        <button class="tm-btn" id="tm-fwd-1m" title="+1 min">»</button>
+        <button class="tm-btn" id="tm-fwd-1h" title="+1 uur">⏭</button>
+        <button class="tm-btn tm-live" id="tm-live" title="terug naar live">LIVE</button>
+        <button class="tm-btn" id="tm-close" title="sluit time-machine">✕</button>
+      </div>
+    </div>
+    <div class="tm-track-wrap">
+      <canvas class="tm-track" id="tm-track" width="1200" height="36"></canvas>
+      <input type="range" class="tm-slider" id="tm-slider" min="0" max="1000" step="1" value="1000">
+    </div>
+    <div class="tm-legend">
+      <span>2.4 GHz <span class="tm-dot tm-d24"></span></span>
+      <span>5 GHz <span class="tm-dot tm-d5"></span></span>
+      <span>6 GHz <span class="tm-dot tm-d6"></span></span>
+      <span class="tm-spacer"></span>
+      <span id="tm-summary">—</span>
+    </div>
+  </div>
+
+  <button class="time-machine-toggle" id="tm-toggle" title="Time Machine — sleep door netwerktijd">⏱</button>
+
   <footer class="bottom-left">
     <details class="dropdown" data-open="viewMenuOpen">
       <summary><span class="caret">▸</span><span class="dd-title" data-i18n="menu.view">WEERGAVE</span></summary>

@@ -471,6 +471,23 @@ app.get('/api/trends/bands/now', (_, res) => {
   res.json({ ok:true, latest: db.bandLatest() });
 });
 
+// ─── Time Machine ───
+// Volledige netwerk-state op willekeurig moment (geclamped op snapshot-window).
+app.get('/api/timetravel', (req, res) => {
+  if (!db.isReady()) return res.json({ ok:false, error:'history-disabled' });
+  const ts = Number(req.query.ts) || Math.floor(Date.now() / 1000);
+  const win = Number(req.query.window) || 90;
+  res.json({ ok:true, snapshot: db.snapshotAt({ ts, windowSec: win }) });
+});
+// Rangelijn: data voor de tijdslider (band-aggregaties per stepSec)
+app.get('/api/timetravel/range', (req, res) => {
+  if (!db.isReady()) return res.json({ ok:false, error:'history-disabled' });
+  const to = Number(req.query.to) || Math.floor(Date.now() / 1000);
+  const from = Number(req.query.from) || (to - 86400);
+  const stepSec = Number(req.query.step) || 300;
+  res.json({ ok:true, range: db.snapshotRange({ from, to, stepSec }) });
+});
+
 app.post('/api/speedtest', async (_, res) => {
   try {
     const r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/cmd/devmgr`, {
