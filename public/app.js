@@ -2532,7 +2532,7 @@ function drawSpec6() {
   // Eigen APs op 6 GHz (band 6e of 6g)
   for (const [mac, info] of Object.entries(apChannels)) {
     for (const r of info.channels || []) {
-      if (r.band !== '6e' && r.band !== '6g' && r.band !== 'ng') continue;
+      if (r.band !== '6e' && r.band !== '6g') continue;
       const x = spec6X(r.channel, w, padL, padR);
       if (x < 0) continue;
       c.strokeStyle = 'rgba(140,220,180,0.45)';

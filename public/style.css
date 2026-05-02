@@ -248,8 +248,9 @@ body.spectrum-mode .spectrum-panel {
   width: 100%;
   min-width: 0;
 }
-body.spectrum-mode .spectrum-panel:first-child { flex: 1.2; }
-body.spectrum-mode .spectrum-panel:last-child  { flex: 1; }
+body.spectrum-mode .spectrum-panel:nth-child(1) { flex: 1; }
+body.spectrum-mode .spectrum-panel:nth-child(2) { flex: 1.4; }
+body.spectrum-mode .spectrum-panel:nth-child(3) { flex: 1.6; }
 body.spectrum-mode .panel-label {
   font-size: 11px;
   letter-spacing: 0.22em;
