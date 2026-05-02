@@ -38,7 +38,6 @@
       <button class="tab-btn" data-tab="intern">INTERN</button>
       <button class="tab-btn" data-tab="extern">EXTERN</button>
       <button class="tab-btn" data-tab="spectrum">SPECTRUM</button>
-      <button class="tab-btn" data-tab="firewall">FIREWALL</button>
       <button class="tab-btn" data-tab="advisor">ADVISOR</button>
       <button class="tab-btn alerts-tab" data-tab="alerts">EVENTS<span class="alerts-badge" id="alerts-badge" style="display:none">0</span></button>
     </nav>
@@ -303,88 +302,6 @@
               </tr>
             </thead>
             <tbody id="recon-transient-rows"></tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  </section>
-
-  <!-- ─────────────────────────────────────────────────────────
-       FIREWALL — live wereldkaart met threat-arcs + event-feed
-       ───────────────────────────────────────────────────────── -->
-  <section class="recon-page page" id="firewall-page">
-    <div class="page-head">
-      <h2 class="page-title">FIREWALL · perimeter view</h2>
-      <div class="page-meta">
-        <span><b id="fw-count-events">—</b> events</span>
-        <span><b id="fw-count-countries">—</b> landen</span>
-        <span><b id="fw-count-rules">—</b> rules</span>
-        <span><b id="fw-count-pforw">—</b> port-fwd</span>
-      </div>
-      <div class="toolbar">
-        <button class="tag tag--btn" id="fw-demo-toggle" type="button">▶ start demo</button>
-        <select id="fw-severity-filter">
-          <option value="">alle severities</option>
-          <option value="critical">kritiek</option>
-          <option value="high">hoog</option>
-          <option value="medium">medium</option>
-          <option value="low">laag</option>
-        </select>
-        <button class="tag tag--btn" id="fw-refresh" type="button">↻</button>
-      </div>
-    </div>
-    <div class="recon-body">
-      <section class="recon-section" id="fw-map-section">
-        <h3>🌍 LIVE THREAT MAP</h3>
-        <div class="recon-note" style="margin: 0 0 14px 0">
-          Source-IPs van firewall-events worden geo-gelokaliseerd via ip-api.com (gecached 24u).
-          Pulserende arcs lopen van source naar je WAN-locatie.
-          <strong>Vereist: Threat Management aan in UniFi</strong> — gebruik anders demo-mode.
-        </div>
-        <div class="fw-map-wrap">
-          <canvas id="fw-map" width="1400" height="700"></canvas>
-          <div class="fw-map-legend">
-            <span class="fw-leg-item"><span class="fw-leg-dot sev-critical"></span> kritiek</span>
-            <span class="fw-leg-item"><span class="fw-leg-dot sev-high"></span> hoog</span>
-            <span class="fw-leg-item"><span class="fw-leg-dot sev-medium"></span> medium</span>
-            <span class="fw-leg-item"><span class="fw-leg-dot sev-low"></span> laag</span>
-            <span class="fw-leg-item"><span class="fw-leg-dot sev-home"></span> home (WAN)</span>
-          </div>
-        </div>
-      </section>
-
-      <div class="fw-grid">
-        <section class="recon-section">
-          <h3>📡 LIVE EVENT FEED</h3>
-          <div id="fw-event-feed" class="fw-feed">geen events — start demo of activeer Threat Management in UniFi.</div>
-        </section>
-
-        <section class="recon-section">
-          <h3>🌐 TOP COUNTRIES</h3>
-          <div id="fw-top-countries" class="fw-top-list"></div>
-        </section>
-      </div>
-
-      <section class="recon-section">
-        <h3>🛡 ACTIEVE FIREWALL-REGELS</h3>
-        <div class="recon-table-wrap">
-          <table class="tbl recon-table">
-            <thead>
-              <tr><th>Naam</th><th>Ruleset</th><th>Action</th><th>Protocol</th><th>Src</th><th>Dst</th><th class="r">Status</th></tr>
-            </thead>
-            <tbody id="fw-rules-rows"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="recon-section">
-        <h3>📍 PORT FORWARDS · inbound NAT</h3>
-        <div class="recon-table-wrap">
-          <table class="tbl recon-table">
-            <thead>
-              <tr><th>Naam</th><th>Proto</th><th>Source</th><th>Public port</th><th>→ Internal</th><th>Internal port</th><th class="r">Status</th></tr>
-            </thead>
-            <tbody id="fw-pforw-rows"></tbody>
           </table>
         </div>
       </section>

@@ -314,7 +314,6 @@ body.recon-mode #stage { display: none !important; }
 body.intern-mode #intern-page { display: block; }
 body.extern-mode #extern-page { display: block; }
 body.advisor-mode #advisor-page { display: block; }
-body.firewall-mode #firewall-page { display: block; }
 body.recon-mode .back-btn { display: inline-flex; }
 
 .recon-page { display: none; padding: 80px 30px 40px; max-width: 1500px; margin: 0 auto; }
@@ -1917,92 +1916,3 @@ tr.has-note:hover { background: rgba(184,255,208,0.10); }
 body:has(.beta-banner:not([style*="display:none"])) header.top-left { top: 50px; }
 body:has(.beta-banner:not([style*="display:none"])) .recon-page.page { padding-top: 158px; }
 
-/* ─── FIREWALL — wereldkaart + feed + countries ─── */
-.fw-map-wrap {
-  position: relative;
-  background: rgba(2,6,4,0.85);
-  border-radius: var(--r-3);
-  border: 1px solid var(--rule);
-  overflow: hidden;
-  height: 540px;
-}
-.fw-map-wrap canvas { width: 100%; height: 100%; display: block; }
-.fw-map-legend {
-  position: absolute; bottom: 10px; right: 14px;
-  display: flex; gap: 12px; flex-wrap: wrap;
-  padding: 6px 10px;
-  background: rgba(0,0,0,0.55); border: 1px solid var(--rule);
-  border-radius: var(--r-2);
-  font-family: var(--mono); font-size: 9.5px;
-  color: var(--fg-dim); letter-spacing: 0.06em;
-}
-.fw-leg-item { display: inline-flex; align-items: center; gap: 5px; }
-.fw-leg-dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
-.fw-leg-dot.sev-critical { background: #ff4d6d; color: #ff4d6d; }
-.fw-leg-dot.sev-high     { background: #ffa14a; color: #ffa14a; }
-.fw-leg-dot.sev-medium   { background: #ffc46b; color: #ffc46b; }
-.fw-leg-dot.sev-low      { background: #7affb6; color: #7affb6; }
-.fw-leg-dot.sev-home     { background: #b8ffd0; color: #b8ffd0; }
-
-.fw-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 14px;
-  margin-top: 14px;
-}
-@media (max-width: 1100px) { .fw-grid { grid-template-columns: 1fr; } }
-
-.fw-feed {
-  max-height: 480px; overflow-y: auto;
-  font-family: var(--mono); font-size: 11px;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.fw-feed-empty {
-  color: var(--fg-faint); padding: 28px 12px; text-align: center;
-}
-.fw-feed-row {
-  display: grid;
-  grid-template-columns: 60px 70px 130px 110px 1fr 110px;
-  gap: 8px;
-  padding: 5px 9px;
-  background: rgba(13,17,23,0.4);
-  border-left: 3px solid var(--rule);
-  border-radius: 4px;
-  align-items: center;
-}
-.fw-feed-row.sev-critical { border-left-color: #ff4d6d; }
-.fw-feed-row.sev-high     { border-left-color: #ffa14a; }
-.fw-feed-row.sev-medium   { border-left-color: #ffc46b; }
-.fw-feed-row.sev-low      { border-left-color: #7affb6; }
-.fw-feed-row .fw-time { color: var(--fg-faint); font-size: 10px; }
-.fw-feed-row .fw-sev {
-  text-align: center; font-size: 9px; font-weight: 700;
-  padding: 1px 4px; border-radius: var(--r-pill);
-  border: 1px solid;
-}
-.fw-feed-row .fw-loc { color: var(--fg); font-size: 11px; }
-.fw-feed-row .fw-cat { color: var(--fg-dim); font-size: 10px; }
-.fw-feed-row .fw-msg { color: var(--fg-dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fw-feed-row .fw-ip  { color: var(--fg-faint); font-size: 10px; text-align: right; }
-
-.fw-top-list { display: flex; flex-direction: column; gap: 6px; }
-.fw-country-row {
-  display: grid; grid-template-columns: 130px 1fr 40px;
-  gap: 10px; align-items: center;
-  font-family: var(--mono); font-size: 11px;
-}
-.fw-c-name { color: var(--fg); }
-.fw-c-bar {
-  height: 8px; background: rgba(184,255,208,0.06);
-  border-radius: 4px; overflow: hidden;
-}
-.fw-c-fill {
-  display: block; height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--warn));
-  border-radius: 4px;
-}
-.fw-c-count { text-align: right; color: var(--fg-dim); }
-
-#fw-demo-toggle.active {
-  background: var(--accent-glow); color: var(--accent); border-color: var(--accent);
-}
