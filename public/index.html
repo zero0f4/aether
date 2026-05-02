@@ -174,32 +174,53 @@
   </section>
 
   <section class="bottom-strip" id="channel-strip">
-    <div class="strip-head">
-      <span class="strip-title" data-i18n="spec.title">SPECTRUM ANALYZER</span>
-      <span class="strip-meta" id="strip-meta">—</span>
-      <span class="strip-legend">
-        <span class="lg-item"><span class="dot own"></span><span data-i18n="spec.legend.own">eigen</span></span>
-        <span class="lg-item"><span class="dot dist"></span><span data-i18n="spec.legend.dist">storend</span></span>
-        <span class="lg-item"><span class="dot pass"></span><span data-i18n="spec.legend.pass">passief</span></span>
-        <span class="lg-sep">·</span>
-        <span class="lg-item"><span class="dot band-2"></span>2.4G</span>
-        <span class="lg-item"><span class="dot band-5"></span>5G</span>
-        <span class="lg-item"><span class="dot band-6"></span>6G</span>
-      </span>
+    <div class="spec-topbar">
+      <div class="spec-title-row">
+        <span class="strip-title" data-i18n="spec.title">SPECTRUM ANALYZER</span>
+        <span class="strip-meta" id="strip-meta">—</span>
+      </div>
+      <div class="band-pills">
+        <button class="band-pill active" data-band="all">ALL</button>
+        <button class="band-pill" data-band="2.4">
+          <span class="bp-label">2.4 GHz</span>
+          <span class="bp-meta" id="pill24-meta">—</span>
+          <canvas class="bp-spark" id="pill24-spark" width="60" height="14"></canvas>
+        </button>
+        <button class="band-pill" data-band="5">
+          <span class="bp-label">5 GHz</span>
+          <span class="bp-meta" id="pill5-meta">—</span>
+          <canvas class="bp-spark" id="pill5-spark" width="60" height="14"></canvas>
+        </button>
+        <button class="band-pill" data-band="6">
+          <span class="bp-label">6 GHz</span>
+          <span class="bp-meta" id="pill6-meta">—</span>
+          <canvas class="bp-spark" id="pill6-spark" width="60" height="14"></canvas>
+        </button>
+      </div>
+      <div class="filter-chips">
+        <button class="chip active" data-filter="own"><span class="dot own"></span><span data-i18n="spec.legend.own">eigen</span></button>
+        <button class="chip active" data-filter="disturbing"><span class="dot dist"></span><span data-i18n="spec.legend.dist">storend</span></button>
+        <button class="chip active" data-filter="passive"><span class="dot pass"></span><span data-i18n="spec.legend.pass">passief</span></button>
+      </div>
     </div>
-    <div class="spectrum-row">
-      <div class="spectrum-panel">
-        <div class="panel-label" data-i18n="spec.panel24">2.4 GHz · kanaal-overlap</div>
-        <canvas id="spec24" width="540" height="160"></canvas>
+    <div class="spec-content">
+      <div class="spectrum-row">
+        <div class="spectrum-panel" data-band="2.4">
+          <div class="panel-label" data-i18n="spec.panel24">2.4 GHz · kanaal-overlap (1/6/11)</div>
+          <canvas id="spec24" width="540" height="160"></canvas>
+        </div>
+        <div class="spectrum-panel" data-band="5">
+          <div class="panel-label" data-i18n="spec.panel5">5 GHz · UNII-1/2/2e/3 + DFS</div>
+          <canvas id="spec5" width="700" height="160"></canvas>
+        </div>
+        <div class="spectrum-panel" data-band="6">
+          <div class="panel-label" data-i18n="spec.panel6">6 GHz · WiFi 6E · PSC kanalen gemarkeerd</div>
+          <canvas id="spec6" width="780" height="160"></canvas>
+        </div>
       </div>
-      <div class="spectrum-panel">
-        <div class="panel-label" data-i18n="spec.panel5">5 GHz · kanalen (DFS gearceerd)</div>
-        <canvas id="spec5" width="700" height="160"></canvas>
-      </div>
-      <div class="spectrum-panel">
-        <div class="panel-label" data-i18n="spec.panel6">6 GHz · WiFi 6E (kanalen 1-233)</div>
-        <canvas id="spec6" width="780" height="160"></canvas>
-      </div>
+      <aside class="spec-detail" id="spec-detail">
+        <div class="spec-detail-empty">Klik op een marker voor details</div>
+      </aside>
     </div>
   </section>
 

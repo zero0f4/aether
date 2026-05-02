@@ -2189,6 +2189,144 @@ setupSpectrumHover(spec24, spec24Hits);
 setupSpectrumHover(spec5, spec5Hits);
 setupSpectrumHover(spec6, spec6Hits);
 
+// ─── Spectrum-streamline: filter state + click-to-detail + band-pills + sparklines ───
+const specFilter = { own:true, disturbing:true, passive:true };
+let specPinned = null;  // gepind item voor detail-panel
+
+function specShouldDraw(kind) {
+  if (kind === 'own')        return specFilter.own;
+  if (kind === 'disturbing') return specFilter.disturbing;
+  return specFilter.passive;
+}
+
+function setupSpectrumClick(canvas, hits) {
+  if (!canvas) return;
+  canvas.addEventListener('click', ev => {
+    const r = canvas.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) * (canvas.width / r.width);
+    const my = (ev.clientY - r.top) * (canvas.height / r.height);
+    let best = null, bestD = Infinity;
+    for (const h of hits) {
+      const dx = mx - h.x, dy = my - h.y;
+      const d = Math.hypot(dx, dy);
+      const tol = h.r ? h.r + 4 : 18;
+      if (d < tol && d < bestD) { bestD = d; best = h; }
+    }
+    if (best) {
+      specPinned = best.item;
+      renderSpecDetail(specPinned);
+    } else {
+      specPinned = null;
+      renderSpecDetail(null);
+    }
+  });
+}
+setupSpectrumClick(spec24, spec24Hits);
+setupSpectrumClick(spec5, spec5Hits);
+setupSpectrumClick(spec6, spec6Hits);
+
+function renderSpecDetail(item) {
+  const el = document.getElementById('spec-detail');
+  if (!el) return;
+  if (!item) {
+    el.innerHTML = '<div class="spec-detail-empty">' + (prefs.lang==='en' ? 'Click a marker for details' : 'Klik op een marker voor details') + '</div>';
+    return;
+  }
+  if (item.kind === 'own') {
+    const ap = [...apsMap.values()].find(a => a.mac === item.mac);
+    const r = item.radio || {};
+    const cu = r.cu_total ?? '—';
+    const stx = r.cu_self_tx ?? '—';
+    const srx = r.cu_self_rx ?? '—';
+    const nu = r.n_users ?? (ap ? ap.clientCount : '—');
+    const bandLbl = r.band === '6e' || r.band === '6g' ? '6 GHz' : r.band === 'na' ? '5 GHz' : '2.4 GHz';
+    const ht = r.ht ? r.ht + ' MHz' : '—';
+    const tx = r.tx_power ?? '—';
+    el.innerHTML = `
+      <h4>${item.label || (ap && ap.name) || 'AP'}</h4>
+      <div class="row"><span class="lab">band</span><span class="v ok">${bandLbl}</span></div>
+      <div class="row"><span class="lab">kanaal</span><span class="v">${item.ch}</span></div>
+      <div class="row"><span class="lab">breedte</span><span class="v">${ht}</span></div>
+      <div class="row"><span class="lab">utilization</span><span class="v ${cu>=60?'warn':'ok'}">${cu}${cu!=='—'?'%':''}</span></div>
+      <div class="row"><span class="lab">self-tx</span><span class="v">${stx}${stx!=='—'?'%':''}</span></div>
+      <div class="row"><span class="lab">self-rx</span><span class="v">${srx}${srx!=='—'?'%':''}</span></div>
+      <div class="row"><span class="lab">clients</span><span class="v">${nu}</span></div>
+      <div class="row"><span class="lab">tx-power</span><span class="v">${tx}</span></div>
+      ${ap ? `<div class="row"><span class="lab">model</span><span class="v">${ap.model||'—'}</span></div>` : ''}
+      ${ap ? `<div class="row"><span class="lab">firmware</span><span class="v">${ap.firmware||'—'}</span></div>` : ''}
+      <span class="meta-tag">eigen AP</span>`;
+  } else {
+    const n = item.n;
+    if (!n) { el.innerHTML = '<div class="spec-detail-empty">geen data</div>'; return; }
+    const bandLbl = n.band === '6e' || n.band === '6g' ? '6 GHz' : n.band === 'na' ? '5 GHz' : '2.4 GHz';
+    el.innerHTML = `
+      <h4>${n.ssid || '(hidden)'}</h4>
+      <div class="row"><span class="lab">BSSID</span><span class="v">${n.id||'—'}</span></div>
+      <div class="row"><span class="lab">band</span><span class="v">${bandLbl}</span></div>
+      <div class="row"><span class="lab">kanaal</span><span class="v">${n.channel}</span></div>
+      <div class="row"><span class="lab">RSSI</span><span class="v ${n.rssi<-80?'warn':'ok'}">${n.rssi} dBm</span></div>
+      <div class="row"><span class="lab">leeftijd</span><span class="v">${n.age}s</span></div>
+      <span class="meta-tag">${item.kind === 'disturbing' ? 'storend' : 'passief'}</span>`;
+  }
+}
+
+// Band-pills: toggle welke band(en) zichtbaar
+document.querySelectorAll('.band-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.band-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const band = btn.dataset.band;
+    document.body.classList.remove('spec-only-2-4','spec-only-5','spec-only-6');
+    if (band === '2.4') document.body.classList.add('spec-only-2-4');
+    else if (band === '5') document.body.classList.add('spec-only-5');
+    else if (band === '6') document.body.classList.add('spec-only-6');
+    if (typeof resizeSpectrumCanvases === 'function') resizeSpectrumCanvases();
+  });
+});
+
+// Filter-chips
+document.querySelectorAll('.chip[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('active');
+    const k = btn.dataset.filter;
+    specFilter[k] = btn.classList.contains('active');
+    if (typeof refreshChannels === 'function') refreshChannels();
+  });
+});
+
+// Sparklines: laatste 60 min utilization-trend (gemiddeld over alle APs op dat band)
+async function refreshBandSparklines() {
+  try {
+    const r = await fetch('/api/trends/bands?hours=1', { cache:'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j.ok) return;
+    const rows = j.rows || [];
+    document.getElementById('pill24-meta').textContent = (j.rows.at(-1)?.c_24 ?? 0) + ' clients';
+    document.getElementById('pill5-meta').textContent  = (j.rows.at(-1)?.c_5 ?? 0)  + ' clients';
+    document.getElementById('pill6-meta').textContent  = (j.rows.at(-1)?.c_6 ?? 0)  + ' clients';
+    const draw = (cvId, key, color) => {
+      const c = document.getElementById(cvId); if (!c) return;
+      const ctx = c.getContext('2d'); const w = c.width, h = c.height;
+      ctx.clearRect(0,0,w,h);
+      if (rows.length < 2) return;
+      const max = Math.max(1, ...rows.map(r => r[key] || 0));
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
+      rows.forEach((r,i) => {
+        const x = (i/(rows.length-1))*w;
+        const y = h - 2 - ((r[key]||0)/max)*(h-3);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    };
+    draw('pill24-spark','c_24','#ffaa6e');
+    draw('pill5-spark', 'c_5', '#9cd8ff');
+    draw('pill6-spark', 'c_6', '#c8f5d6');
+  } catch (_) {}
+}
+setInterval(refreshBandSparklines, 60_000);
+setTimeout(refreshBandSparklines, 1500);  // zodra data binnen is
+
 function animateChannelOscillators() {
   if (true) { requestAnimationFrame(animateChannelOscillators); return; }
   if (!prefs.showChannels) {
@@ -2283,12 +2421,14 @@ function drawSpec24() {
   const bells = [];
   for (const n of neighbors.values()) {
     if (n.band !== 'ng' || !n.channel) continue;
-    if (!n.disturbing) { /* passive: altijd in spectrum */ }
+    if (n.disturbing && !specFilter.disturbing) continue;
+    if (!n.disturbing && !specFilter.passive) continue;
     bells.push({ ch: n.channel, dbm: dbmFromRssi(n.rssi), label: n.ssid, kind: n.disturbing ? 'disturbing' : 'passive', n });
   }
   for (const [mac, info] of Object.entries(apChannels)) {
     for (const r of info.channels || []) {
       if (r.band !== 'ng') continue;
+      if (!specFilter.own) continue;
       bells.push({ ch: r.channel, dbm: -32, label: info.name, kind: 'own', radio: r, mac });
     }
   }
@@ -2427,6 +2567,7 @@ function drawSpec5() {
   for (const [mac, info] of Object.entries(apChannels)) {
     for (const r of info.channels || []) {
       if (r.band !== 'na') continue;
+      if (!specFilter.own) continue;
       items.push({ ch: r.channel, kind: 'own', label: info.name, radio: r, mac });
     }
   }
@@ -2533,6 +2674,7 @@ function drawSpec6() {
   for (const [mac, info] of Object.entries(apChannels)) {
     for (const r of info.channels || []) {
       if (r.band !== '6e' && r.band !== '6g') continue;
+      if (!specFilter.own) continue;
       const x = spec6X(r.channel, w, padL, padR);
       if (x < 0) continue;
       c.strokeStyle = 'rgba(140,220,180,0.45)';
@@ -2556,7 +2698,8 @@ function drawSpec6() {
   for (const n of neighbors.values()) {
     if (n.band !== '6e' && n.band !== '6g') continue;
     if (!n.channel) continue;
-    if (!n.disturbing) { /* passive: altijd in spectrum */ }
+    if (n.disturbing && !specFilter.disturbing) continue;
+    if (!n.disturbing && !specFilter.passive) continue;
     const x = spec6X(n.channel, w, padL, padR);
     if (x < 0) continue;
     const y = specY(dbmFromRssi(n.rssi), h, padT, padB);
