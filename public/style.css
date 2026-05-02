@@ -1553,3 +1553,52 @@ body.tm-live .tm-btn.tm-live {
   color: var(--fg-faint); letter-spacing: 0.08em;
 }
 .dna-axis .lab { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; text-align: center; }
+
+/* ─── WiGLE wardrive popover ─── */
+.wigle-btn {
+  background: transparent; border: 1px solid var(--rule);
+  color: var(--fg-dim);
+  width: 22px; height: 22px;
+  font-size: 12px; padding: 0; line-height: 1;
+  border-radius: var(--r-pill);
+  cursor: pointer; margin-left: 4px;
+  transition: all .12s;
+}
+.wigle-btn:hover { background: var(--accent-glow); color: var(--accent); border-color: var(--accent-soft); transform: scale(1.1); }
+.wigle-popover {
+  position: absolute;
+  width: 360px; z-index: 300;
+  background: rgba(2,8,6,0.97);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-3);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 28px var(--accent-glow);
+  font: var(--fs-md) var(--mono);
+  color: var(--fg);
+}
+.wigle-popover .wigle-head {
+  padding: 8px 12px;
+  background: rgba(184,255,208,0.08);
+  border-bottom: 1px solid var(--rule);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+  font-weight: 600; color: var(--accent);
+  letter-spacing: 0.04em;
+}
+.wigle-popover .wigle-head .mono { font-weight: 400; color: var(--fg-dim); }
+.wigle-popover .wigle-body { padding: 10px 12px; }
+.wigle-popover .wigle-row {
+  display: flex; gap: 8px; padding: 3px 0;
+  border-bottom: 1px dashed rgba(184,255,208,0.05);
+}
+.wigle-popover .wigle-row b {
+  flex: 0 0 130px; color: var(--fg-faint); font-weight: 400; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.wigle-popover .wigle-row span { flex: 1; color: var(--fg); }
+.wigle-popover .wigle-link {
+  display: inline-block; margin-top: 8px; padding: 6px 10px;
+  background: var(--accent-glow); border: 1px solid var(--accent-soft);
+  color: var(--accent); border-radius: var(--r-2);
+  text-decoration: none; font-size: 11px;
+}
+.wigle-popover .wigle-link:hover { background: rgba(184,255,208,0.18); }

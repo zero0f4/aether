@@ -472,12 +472,16 @@ app.get('/api/trends/bands/now', (_, res) => {
 });
 
 // ─── All clients (incl. offline) — voor RECON-page ───
+// Cross-referenced met live /stat/sta zodat is_online betrouwbaar is
+// (UniFi's /stat/alluser zelf zet vaak alles op false).
 app.get('/api/clients/all', async (_, res) => {
   try {
     let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=24`);
     if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=24`); }
     if (!r.ok) return res.status(r.status).json({ ok:false, error:'unifi-failed' });
     const j = await r.json();
+    // Live clients voor accurate online-status
+    const liveMacs = new Set((lastPayload.devices || []).map(d => (d.id || '').toLowerCase()));
     const items = (j.data || []).filter(c => c.is_wired === false).map(c => ({
       mac: c.mac,
       name: c.name || c.hostname || c.oui || c.mac.slice(-5),
@@ -487,7 +491,7 @@ app.get('/api/clients/all', async (_, res) => {
       ap: c.ap_mac || null,
       lastSeen: c.last_seen || null,
       firstSeen: c.first_seen || null,
-      online: !!c.is_online,                 // alluser returns offline if disconnected
+      online: liveMacs.has((c.mac || '').toLowerCase()),  // ← accurate
       lastRssi: c.rssi ?? null,
       lastChannel: c.channel ?? null,
       lastBand: c.radio_proto || c.radio || null,
@@ -495,6 +499,43 @@ app.get('/api/clients/all', async (_, res) => {
       rx: c['rx_bytes'] || 0,
     }));
     res.json({ ok:true, clients: items });
+  } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
+});
+
+// ─── WiGLE integration — publieke wardrive-database lookup ───
+// Vereist WIGLE_USER + WIGLE_KEY in .env (account: https://wigle.net/account)
+// Resultaat: globale observaties van een BSSID (locaties, SSID-historie, gezien-tellingen).
+app.get('/api/wigle/bssid', async (req, res) => {
+  const user = process.env.WIGLE_USER || '';
+  const key  = process.env.WIGLE_KEY  || '';
+  if (!user || !key) return res.status(503).json({ ok:false, error:'wigle-not-configured', hint:'Stel WIGLE_USER en WIGLE_KEY in via /setup of .env. Account: https://wigle.net/account' });
+  const bssid = String(req.query.bssid || '').trim();
+  if (!/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(bssid)) return res.status(400).json({ ok:false, error:'invalid-bssid' });
+  try {
+    const auth = 'Basic ' + Buffer.from(user + ':' + key).toString('base64');
+    const r = await undiciFetch(`https://api.wigle.net/api/v2/network/search?netid=${encodeURIComponent(bssid)}`, {
+      headers: { 'Authorization': auth, 'Accept': 'application/json', 'User-Agent': 'wifi-pulse' }
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(()=>'');
+      return res.status(r.status).json({ ok:false, error:'wigle-failed', status:r.status, msg:t.slice(0,200) });
+    }
+    const j = await r.json();
+    // Compact en relevant samenvatten
+    const results = (j.results || []).map(n => ({
+      ssid: n.ssid || null,
+      bssid: n.netid || bssid,
+      lat: n.trilat ?? null, lon: n.trilong ?? null,
+      country: n.country || null, region: n.region || null, city: n.city || null,
+      housenumber: n.housenumber || null, road: n.road || null,
+      firstSeen: n.firsttime || null,
+      lastSeen: n.lasttime || null,
+      type: n.type || null,
+      encryption: n.encryption || null,
+      channel: n.channel || null,
+      seen: n.qos ?? n.userfound ?? null,
+    }));
+    res.json({ ok:true, totalResults: j.totalResults || results.length, results });
   } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
 });
 

@@ -975,8 +975,8 @@ function refreshReconPage() {
     const rssiPct = Math.max(5, Math.min(100, ((n.rssi||-90) + 90) * 1.4));
     const rssiCls = n.rssi >= -65 ? 'ok' : n.rssi >= -75 ? '' : 'warn';
     const ageMin = n.age != null ? Math.round(n.age/60) : null;
-    extHtml += `<tr>
-      <td>${(n.ssid||'(hidden)').replace(/</g,'&lt;')}</td>
+    extHtml += `<tr data-bssid="${n.id || ''}">
+      <td>${(n.ssid||'(hidden)').replace(/</g,'&lt;')} <button class="wigle-btn" title="Opzoeken in WiGLE wardrive-database" data-bssid="${n.id||''}">🌐</button></td>
       <td style="font-family:var(--mono);color:var(--fg-dim)">${n.id || '—'}</td>
       <td>${band} GHz</td>
       <td class="r">${n.channel ?? '—'}</td>
@@ -1036,6 +1036,58 @@ function refreshReconPage() {
   document.getElementById('recon-count-dist').textContent = distCount;
   document.getElementById('recon-count-cli').textContent = cli.length;
 }
+
+// ─── WiGLE wardrive-lookup popover ───
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('.wigle-btn');
+  if (!btn) {
+    // klik buiten een popover sluit hem
+    const open = document.querySelector('.wigle-popover');
+    if (open && !ev.target.closest('.wigle-popover')) open.remove();
+    return;
+  }
+  ev.stopPropagation();
+  // Sluit eventuele bestaande popover
+  document.querySelectorAll('.wigle-popover').forEach(p => p.remove());
+  const bssid = btn.dataset.bssid;
+  if (!bssid) return;
+  // Toon laad-indicator
+  const pop = document.createElement('div');
+  pop.className = 'wigle-popover';
+  pop.innerHTML = '<div class="wigle-head">🌐 WiGLE.net lookup — <span class="mono">' + bssid + '</span></div><div class="wigle-body">laden…</div>';
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.top = (r.bottom + 6 + window.scrollY) + 'px';
+  pop.style.left = Math.min(window.innerWidth - 380, r.left + window.scrollX) + 'px';
+  try {
+    const resp = await fetch('/api/wigle/bssid?bssid=' + encodeURIComponent(bssid));
+    const j = await resp.json();
+    if (!j.ok) {
+      const hint = j.hint || '';
+      pop.querySelector('.wigle-body').innerHTML = `<div style="color:var(--warn)">⚠ ${j.error}</div>${hint ? '<div style="margin-top:6px;color:var(--fg-dim);font-size:11px">'+hint+'</div>' : ''}`;
+      return;
+    }
+    const results = j.results || [];
+    if (results.length === 0) {
+      pop.querySelector('.wigle-body').innerHTML = '<div style="color:var(--fg-faint)">Geen observaties in WiGLE-database. Of dit is een nieuw netwerk, of nog nooit gewardrived in jouw omgeving.</div>';
+      return;
+    }
+    const r0 = results[0];
+    const fmt = ts => ts ? new Date(ts).toLocaleDateString('nl-NL') : '—';
+    pop.querySelector('.wigle-body').innerHTML = `
+      <div class="wigle-row"><b>SSID-historie</b> <span>${results.map(r=>r.ssid||'(hidden)').filter((v,i,a)=>a.indexOf(v)===i).join(', ')}</span></div>
+      <div class="wigle-row"><b>Locatie</b> <span>${[r0.city,r0.region,r0.country].filter(Boolean).join(', ') || '—'}</span></div>
+      <div class="wigle-row"><b>Coördinaten</b> <span>${r0.lat ? r0.lat.toFixed(5)+', '+r0.lon.toFixed(5) : '—'}</span></div>
+      <div class="wigle-row"><b>Eerst gezien</b> <span>${fmt(r0.firstSeen)}</span></div>
+      <div class="wigle-row"><b>Laatst gezien</b> <span>${fmt(r0.lastSeen)}</span></div>
+      <div class="wigle-row"><b>Encryptie</b> <span>${r0.encryption || '—'}</span></div>
+      <div class="wigle-row"><b>Type</b> <span>${r0.type || '—'}</span></div>
+      <div class="wigle-row"><b>Totaal observaties</b> <span>${j.totalResults}</span></div>
+      ${r0.lat ? '<a class="wigle-link" target="_blank" href="https://wigle.net/map?maplat='+r0.lat+'&maplon='+r0.lon+'&mapzoom=18">📍 Open op WiGLE-map</a>' : ''}`;
+  } catch (e) {
+    pop.querySelector('.wigle-body').textContent = 'Fout: ' + e.message;
+  }
+});
 
 // Re-render bij filter-wijziging
 ['recon-search','recon-band-filter','recon-only-disturbing','recon-only-own'].forEach(id => {
