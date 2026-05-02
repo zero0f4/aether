@@ -29,6 +29,7 @@
       <button class="tab-btn active" data-tab="pulse" data-i18n="tab.pulse">PULSE</button>
       <button class="tab-btn" data-tab="stats" data-i18n="tab.stats">STATS</button>
       <button class="tab-btn" data-tab="spectrum">SPECTRUM</button>
+      <button class="tab-btn" data-tab="recon">RECON</button>
       <button class="tab-btn alerts-tab" data-tab="alerts" data-i18n="tab.alerts">⚠ ALERTS<span class="alerts-badge" id="alerts-badge" style="display:none">0</span></button>
     </nav>
     <div class="lang-switch">
@@ -142,6 +143,57 @@
         <div class="card-head"><span data-i18n="card.events">ROAMING EVENTS</span></div>
         <div class="card-body"><div id="event-log" class="event-log"></div></div>
       </div>
+    </div>
+  </section>
+
+  <section class="recon-page" id="recon-page">
+    <button class="back-btn" onclick="setTab('pulse')" title="terug naar Pulse">
+      <span class="back-arrow">‹</span><span class="back-label">PULSE</span>
+    </button>
+    <div class="recon-head">
+      <h2 class="recon-title">RECON · alle APs in zicht</h2>
+      <div class="recon-meta">
+        <span><b id="recon-count-own">—</b> eigen</span>
+        <span><b id="recon-count-ext">—</b> extern</span>
+        <span><b id="recon-count-dist">—</b> storend</span>
+      </div>
+      <div class="recon-controls">
+        <input type="search" id="recon-search" placeholder="🔍 zoek SSID / BSSID / kanaal" autocomplete="off">
+        <select id="recon-band-filter">
+          <option value="">alle banden</option>
+          <option value="2.4">2.4 GHz</option>
+          <option value="5">5 GHz</option>
+          <option value="6">6 GHz</option>
+        </select>
+        <label class="recon-chip"><input type="checkbox" id="recon-only-disturbing"> alleen storend</label>
+        <label class="recon-chip"><input type="checkbox" id="recon-only-own"> alleen eigen</label>
+      </div>
+    </div>
+    <div class="recon-body">
+      <section class="recon-section">
+        <h3>EIGEN APs</h3>
+        <div class="recon-cards" id="recon-own-cards"></div>
+      </section>
+      <section class="recon-section">
+        <h3>EXTERNE APs (neighbors)</h3>
+        <div class="recon-table-wrap">
+          <table class="recon-table">
+            <thead>
+              <tr>
+                <th>SSID</th>
+                <th>BSSID</th>
+                <th>Band</th>
+                <th class="r">Kanaal</th>
+                <th class="r">RSSI</th>
+                <th>Status</th>
+                <th>Gezien door</th>
+                <th class="r">Leeftijd</th>
+              </tr>
+            </thead>
+            <tbody id="recon-ext-rows"></tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </section>
 

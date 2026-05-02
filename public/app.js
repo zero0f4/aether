@@ -373,8 +373,10 @@ function setTab(tab) {
   document.body.classList.toggle('stats-mode', tab === 'stats');
   document.body.classList.toggle('alerts-mode', tab === 'alerts');
   document.body.classList.toggle('spectrum-mode', tab === 'spectrum');
+  document.body.classList.toggle('recon-mode', tab === 'recon');
   if (tab === 'alerts') refreshAlertsPage();
   if (tab === 'spectrum') resizeSpectrumCanvases();
+  if (tab === 'recon' && typeof refreshReconPage === 'function') refreshReconPage();
 }
 
 // Maak de spectrum-canvases breder als we in fullscreen-mode staan
@@ -866,6 +868,126 @@ function collectAlerts() {
   }
   return out;
 }
+
+// ─── RECON-page renderer ───
+function bandFromRadio(r) {
+  if (!r) return '?';
+  const v = String(r).toLowerCase();
+  if (v === '6e' || v === '6g' || v.includes('_6')) return '6';
+  if (v === 'ng' || v === 'b' || v === 'g' || v === 'n' || v.includes('2')) return '2.4';
+  return '5';
+}
+
+function refreshReconPage() {
+  const ownEl = document.getElementById('recon-own-cards');
+  const extEl = document.getElementById('recon-ext-rows');
+  if (!ownEl || !extEl) return;
+
+  const search = (document.getElementById('recon-search')?.value || '').toLowerCase().trim();
+  const bandF = document.getElementById('recon-band-filter')?.value || '';
+  const onlyDist = document.getElementById('recon-only-disturbing')?.checked || false;
+  const onlyOwn  = document.getElementById('recon-only-own')?.checked || false;
+
+  // ── Own APs ──
+  const own = [...apsMap.values()];
+  const channelsByMac = (typeof apChannels === 'object' && apChannels) ? apChannels : {};
+  let ownHtml = '';
+  let ownShown = 0;
+  for (const ap of own) {
+    if (search) {
+      const blob = (ap.name + ' ' + (ap.mac||'') + ' ' + (ap.model||'')).toLowerCase();
+      if (!blob.includes(search)) continue;
+    }
+    const radios = (channelsByMac[ap.mac]?.channels) || [];
+    if (bandF) {
+      const matching = radios.some(r => bandFromRadio(r.radio_name || r.band) === bandF);
+      if (!matching) continue;
+    }
+    ownShown++;
+    const radHtml = radios.map(r => {
+      const band = bandFromRadio(r.radio_name || r.band);
+      const cu = r.cu_total ?? '—';
+      const stx = r.cu_self_tx ?? '—';
+      const srx = r.cu_self_rx ?? '—';
+      const nu = r.n_users ?? '—';
+      const cuClass = (cu !== '—' && cu >= 60) ? 'warn' : (cu !== '—' && cu >= 80 ? 'crit' : 'ok');
+      return `
+        <div class="radio-block">
+          <span class="band-tag">${band} GHz</span>
+          <span class="lab">ch</span> <b>${r.channel ?? '—'}</b>
+          · <span class="lab">${r.ht ?? '?'} MHz</span>
+          <div class="row"><span class="lab">utilization</span><span class="v ${cuClass}">${cu}${cu!=='—'?'%':''}</span></div>
+          <div class="row"><span class="lab">self tx / rx</span><span class="v">${stx}/${srx}${stx!=='—'?'%':''}</span></div>
+          <div class="row"><span class="lab">clients</span><span class="v">${nu}</span></div>
+          <div class="row"><span class="lab">tx-power</span><span class="v">${r.tx_power ?? '—'}</span></div>
+        </div>`;
+    }).join('');
+    ownHtml += `
+      <div class="recon-card">
+        <div class="recon-card-head">
+          <span class="recon-card-name">${ap.name || ap.mac}</span>
+          <span class="recon-card-model">${ap.model || ''}</span>
+        </div>
+        <div class="row"><span class="lab">MAC</span><span class="v">${ap.mac || '—'}</span></div>
+        <div class="row"><span class="lab">IP</span><span class="v">${ap.ip || '—'}</span></div>
+        <div class="row"><span class="lab">firmware</span><span class="v">${ap.firmware || '—'}${ap.firmwareLatest?' → '+ap.firmwareLatest:''}</span></div>
+        <div class="row"><span class="lab">uptime</span><span class="v">${ap.uptime ? Math.round(ap.uptime/3600)+'h' : '—'}</span></div>
+        <div class="row"><span class="lab">clients</span><span class="v">${ap.clientCount ?? '—'}</span></div>
+        ${radHtml || '<div class="row"><span class="lab">geen radios</span></div>'}
+      </div>`;
+  }
+  ownEl.innerHTML = ownHtml || '<div style="color:var(--fg-faint);font:11px var(--mono);padding:14px">geen eigen APs gevonden</div>';
+
+  // ── External APs (neighbors) ──
+  const ext = [...neighbors.values()];
+  let distCount = 0;
+  let extHtml = '';
+  let extShown = 0;
+  // sort: disturbing first, then by RSSI desc
+  ext.sort((a,b) => {
+    if (a.disturbing !== b.disturbing) return a.disturbing ? -1 : 1;
+    return (b.rssi||-999) - (a.rssi||-999);
+  });
+  for (const n of ext) {
+    if (n.disturbing) distCount++;
+    if (onlyOwn) continue; // skip in external view
+    if (onlyDist && !n.disturbing) continue;
+    const band = bandFromRadio(n.band);
+    if (bandF && band !== bandF) continue;
+    if (search) {
+      const blob = ((n.ssid||'') + ' ' + (n.id||'') + ' ' + (n.channel||'')).toLowerCase();
+      if (!blob.includes(search)) continue;
+    }
+    extShown++;
+    const rssiPct = Math.max(5, Math.min(100, ((n.rssi||-90) + 90) * 1.4));
+    const rssiCls = n.rssi >= -65 ? 'ok' : n.rssi >= -75 ? '' : 'warn';
+    const ageMin = n.age != null ? Math.round(n.age/60) : null;
+    extHtml += `<tr>
+      <td>${(n.ssid||'(hidden)').replace(/</g,'&lt;')}</td>
+      <td style="font-family:var(--mono);color:var(--fg-dim)">${n.id || '—'}</td>
+      <td>${band} GHz</td>
+      <td class="r">${n.channel ?? '—'}</td>
+      <td class="r"><span class="rssi-bar" style="--rssi-pct:${rssiPct}%"></span><span class="v ${rssiCls}">${n.rssi ?? '—'} dBm</span></td>
+      <td><span class="badge ${n.disturbing?'dist':'pass'}">${n.disturbing?'storend':'passief'}</span></td>
+      <td style="font-family:var(--mono);color:var(--fg-dim)">${n.seenBy || '—'}</td>
+      <td class="r">${ageMin!=null ? ageMin+'m' : '—'}</td>
+    </tr>`;
+  }
+  extEl.innerHTML = extHtml || '<tr><td colspan="8" style="color:var(--fg-faint);text-align:center;padding:14px">geen externe APs gevonden</td></tr>';
+
+  // ── Counters ──
+  document.getElementById('recon-count-own').textContent = own.length;
+  document.getElementById('recon-count-ext').textContent = ext.length;
+  document.getElementById('recon-count-dist').textContent = distCount;
+}
+
+// Re-render bij filter-wijziging
+['recon-search','recon-band-filter','recon-only-disturbing','recon-only-own'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', refreshReconPage);
+});
+// Periodieke auto-refresh als de tab actief is (data komt via WS)
+setInterval(() => { if (document.body.classList.contains('recon-mode')) refreshReconPage(); }, 5000);
 
 function refreshAlertsPage() {
   const a = collectAlerts();

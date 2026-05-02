@@ -234,6 +234,130 @@ body.alerts-mode .search-wrap,
 body.alerts-mode #stage { display: none !important; }
 body.alerts-mode .alerts-page { display: block; }
 body.alerts-mode .back-btn { display: inline-flex; }
+
+/* RECON mode */
+body.recon-mode .bottom-left,
+body.recon-mode .top-right,
+body.recon-mode .bottom-strip,
+body.recon-mode .search-wrap,
+body.recon-mode #stage { display: none !important; }
+body.recon-mode .recon-page { display: block; }
+body.recon-mode .back-btn { display: inline-flex; }
+
+.recon-page { display: none; padding: 80px 30px 40px; max-width: 1500px; margin: 0 auto; }
+.recon-head { margin-bottom: 22px; }
+.recon-title {
+  font: 500 22px/1 var(--mono);
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  margin: 0 0 12px 0;
+}
+.recon-meta {
+  display: flex; gap: 24px; font: 11px var(--mono);
+  color: var(--fg-dim); letter-spacing: 0.08em; margin-bottom: 14px;
+}
+.recon-meta b { color: var(--accent); margin-right: 4px; }
+.recon-controls {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.recon-controls input[type=search],
+.recon-controls select {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  font: 12px var(--mono);
+  padding: 5px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+.recon-controls input[type=search] { min-width: 240px; flex: 1; }
+.recon-controls input[type=search]:focus,
+.recon-controls select:focus { border-color: var(--accent-soft); }
+.recon-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 11px var(--mono); color: var(--fg-dim);
+  cursor: pointer; user-select: none;
+  padding: 4px 8px;
+}
+.recon-chip input { accent-color: var(--accent); }
+.recon-section { margin-top: 26px; }
+.recon-section h3 {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.28em;
+  color: var(--fg);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 8px; margin-bottom: 14px;
+}
+.recon-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+.recon-card {
+  background: rgba(0,8,4,0.7);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font: 11px var(--mono);
+}
+.recon-card-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.recon-card-name { font-weight: 600; color: var(--accent); font-size: 13px; letter-spacing: 0.1em; }
+.recon-card-model { color: var(--fg-dim); font-size: 10px; letter-spacing: 0.04em; }
+.recon-card .row { display: flex; justify-content: space-between; padding: 2px 0; }
+.recon-card .lab { color: var(--fg-dim); }
+.recon-card .v { color: var(--fg); }
+.recon-card .v.warn { color: #ffaa6e; }
+.recon-card .v.crit { color: #ff8888; }
+.recon-card .v.ok   { color: #b8ffd0; }
+.recon-card .radio-block {
+  margin-top: 8px; padding: 8px 10px;
+  background: rgba(0,0,0,0.35);
+  border-left: 2px solid rgba(184,255,208,0.25);
+  border-radius: 3px;
+}
+.recon-card .radio-block .band-tag {
+  display: inline-block; padding: 1px 6px; border-radius: 8px;
+  font-size: 9px; letter-spacing: 0.06em;
+  background: rgba(140,220,180,0.18); color: #c8f5d6;
+  margin-right: 6px;
+}
+.recon-table-wrap { overflow-x: auto; }
+.recon-table {
+  width: 100%; border-collapse: collapse;
+  font: 11px var(--mono); color: var(--fg);
+}
+.recon-table th {
+  text-align: left; padding: 8px 10px;
+  background: rgba(0,0,0,0.4);
+  color: var(--fg-dim);
+  font-weight: 500; letter-spacing: 0.12em; font-size: 9px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0;
+}
+.recon-table th.r, .recon-table td.r { text-align: right; }
+.recon-table td { padding: 6px 10px; border-bottom: 1px solid rgba(184,255,208,0.05); }
+.recon-table tr:hover td { background: rgba(184,255,208,0.04); }
+.recon-table .badge {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 9px; letter-spacing: 0.04em; font-weight: 600;
+}
+.recon-table .badge.dist { background: rgba(255,170,110,0.20); color: #ffaa6e; }
+.recon-table .badge.pass { background: rgba(170,180,200,0.15); color: rgba(170,180,200,0.85); }
+.recon-table .rssi-bar {
+  display: inline-block; width: 60px; height: 4px;
+  background: rgba(255,255,255,0.08); border-radius: 2px;
+  margin-right: 6px; vertical-align: middle; position: relative;
+}
+.recon-table .rssi-bar::after {
+  content: ''; position: absolute; top: 0; left: 0; height: 100%;
+  border-radius: 2px; background: var(--accent);
+  width: var(--rssi-pct, 50%);
+}
 body.spectrum-mode .bottom-strip {
   position: fixed;
   left: 50%;
