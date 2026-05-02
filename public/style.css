@@ -1368,3 +1368,134 @@ body.tm-live .tm-btn.tm-live {
 .tm-d5  { background: #9cd8ff; }
 .tm-d6  { background: #c8f5d6; box-shadow: 0 0 6px rgba(200,245,214,0.6); }
 .tm-spacer { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RECON-page v0.8.2 — echt visueel netter
+   ═══════════════════════════════════════════════════════════════════ */
+.recon-page.page { padding: 88px 36px 60px; max-width: 1600px; }
+
+.recon-page .page-title {
+  font-size: 26px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  text-shadow: 0 0 18px var(--accent-glow);
+  position: relative; padding-bottom: var(--sp-3);
+}
+.recon-page .page-title::after {
+  content: ''; position: absolute; left: 0; bottom: 0;
+  width: 64px; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  border-radius: 2px;
+}
+.recon-page .page-meta {
+  font-size: 12px; gap: 28px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.recon-page .page-meta b {
+  font-size: 18px; color: var(--accent);
+  margin-right: 6px; font-weight: 700;
+  text-shadow: 0 0 10px var(--accent-glow);
+}
+.recon-page .page-meta span { display: inline-flex; align-items: baseline; gap: 4px; }
+
+/* Live indicator-pulse */
+.recon-page .page-meta::before {
+  content: '● LIVE';
+  font-size: 9px; letter-spacing: 0.18em;
+  color: var(--accent);
+  margin-right: var(--sp-3);
+  animation: tm-pulse 2s ease-in-out infinite;
+}
+@keyframes tm-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+.recon-page .toolbar {
+  margin-top: var(--sp-4);
+  padding: 14px 18px;
+  border-radius: var(--r-3);
+  background: linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.30));
+  border: 1px solid var(--rule);
+}
+.recon-page .toolbar input[type=search] {
+  padding: 8px 14px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+.recon-page .toolbar select { padding: 8px 12px; font-size: 13px; }
+
+/* Section-headers met badge-style */
+.recon-section { margin-top: 36px; }
+.recon-section h3 {
+  font-size: 11px; letter-spacing: 0.32em;
+  padding: 10px 14px; margin-bottom: 18px;
+  background: rgba(184,255,208,0.06);
+  border: 1px solid var(--rule); border-radius: var(--r-3);
+  color: var(--accent);
+  display: inline-block;
+}
+
+/* Card grid: bigger, more polished */
+.recon-cards { gap: 20px; }
+.recon-card {
+  background: linear-gradient(165deg, rgba(0,12,8,0.92), rgba(0,8,4,0.85));
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-4);
+  padding: 16px 18px;
+  font-size: 12px;
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+  position: relative;
+}
+.recon-card:hover {
+  transform: translateY(-2px);
+  border-left-color: #d8ffe6;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4), 0 0 28px var(--accent-glow);
+}
+.recon-card-head { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--rule); }
+.recon-card-name { font-size: 15px; letter-spacing: 0.06em; font-weight: 700; color: var(--accent); }
+.recon-card-model { font-size: 10px; letter-spacing: 0.06em; color: var(--fg-faint); }
+.recon-card .row { padding: 3px 0; font-size: 11px; }
+.recon-card .lab { color: var(--fg-faint); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+.recon-card .v { font-family: var(--mono); color: var(--fg); }
+
+.recon-card .radio-block {
+  margin-top: 10px; padding: 10px 12px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent-soft);
+  border-radius: var(--r-2);
+  font-size: 11px;
+}
+.recon-card .radio-block .band-tag {
+  display: inline-block; padding: 2px 8px;
+  background: var(--accent-glow); color: var(--accent);
+  border-radius: var(--r-pill);
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.10em;
+  margin-right: 6px;
+}
+.recon-card .radio-block .row { display: flex; justify-content: space-between; }
+
+/* Tables: zebra + smoother hover */
+.recon-page .recon-table tr:nth-child(odd) td { background: rgba(184,255,208,0.015); }
+.recon-page .recon-table tr:hover td { background: rgba(184,255,208,0.07); }
+.recon-page .recon-table th {
+  font-size: 9px; letter-spacing: 0.18em;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.35));
+  border-bottom: 1px solid var(--accent-soft);
+}
+.recon-page .recon-table td { padding: 8px 12px; font-size: 11.5px; }
+.recon-page .recon-table .badge { font-size: 9.5px; padding: 2px 9px; font-weight: 700; }
+.recon-page .recon-table .rssi-bar {
+  width: 70px; height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+}
+.recon-page .recon-table .rssi-bar::after {
+  background: linear-gradient(90deg, var(--warn), var(--accent));
+  border-radius: 3px;
+}
