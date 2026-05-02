@@ -1503,3 +1503,53 @@ body.tm-live .tm-btn.tm-live {
   background: linear-gradient(90deg, var(--warn), var(--accent));
   border-radius: 3px;
 }
+
+/* ─── AP Activity DNA — 24u utilization-heatmap ─── */
+.dna-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(184,255,208,0.06);
+  font: 11px var(--mono);
+}
+.dna-row:hover { background: rgba(184,255,208,0.03); }
+.dna-row .dna-label {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--fg);
+}
+.dna-row .dna-label .band-tag {
+  display: inline-block; padding: 2px 7px; border-radius: var(--r-pill);
+  background: var(--accent-glow); color: var(--accent);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+}
+.dna-row .dna-label .band-tag.b6 { background: rgba(200,245,214,0.15); color: #c8f5d6; }
+.dna-row .dna-label .band-tag.b5 { background: rgba(156,216,255,0.15); color: #9cd8ff; }
+.dna-row .dna-label .band-tag.b24 { background: rgba(255,170,110,0.15); color: #ffaa6e; }
+.dna-strip {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 2px;
+  height: 28px;
+}
+.dna-cell {
+  border-radius: 2px;
+  background: rgba(255,255,255,0.04);
+  position: relative;
+  cursor: help;
+  transition: transform .12s;
+}
+.dna-cell:hover { transform: scaleY(1.15); outline: 1px solid var(--accent-soft); }
+.dna-cell[data-util-1]  { background: rgba(255,255,255,0.06); }
+.dna-cell[data-util-20] { background: rgba(184,255,208,0.18); }
+.dna-cell[data-util-40] { background: rgba(255,220,140,0.30); }
+.dna-cell[data-util-60] { background: rgba(255,170,110,0.45); }
+.dna-cell[data-util-80] { background: rgba(255,110,90,0.65); }
+.dna-cell[data-util-90] { background: rgba(255,60,80,0.85); box-shadow: 0 0 6px rgba(255,80,80,0.6); }
+.dna-axis {
+  display: grid; grid-template-columns: 200px 1fr; gap: var(--sp-3);
+  padding: 6px 14px 4px; font: 9px var(--mono);
+  color: var(--fg-faint); letter-spacing: 0.08em;
+}
+.dna-axis .lab { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; text-align: center; }

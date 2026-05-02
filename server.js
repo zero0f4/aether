@@ -471,6 +471,33 @@ app.get('/api/trends/bands/now', (_, res) => {
   res.json({ ok:true, latest: db.bandLatest() });
 });
 
+// ─── All clients (incl. offline) — voor RECON-page ───
+app.get('/api/clients/all', async (_, res) => {
+  try {
+    let r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=24`);
+    if (r.status === 401) { await login(); r = await unifiFetch(`/proxy/network/api/s/${ACTIVE_SITE}/stat/alluser?within=24`); }
+    if (!r.ok) return res.status(r.status).json({ ok:false, error:'unifi-failed' });
+    const j = await r.json();
+    const items = (j.data || []).filter(c => c.is_wired === false).map(c => ({
+      mac: c.mac,
+      name: c.name || c.hostname || c.oui || c.mac.slice(-5),
+      hostname: c.hostname || null,
+      oui: c.oui || null,
+      ssid: c.essid || c.ssid || null,
+      ap: c.ap_mac || null,
+      lastSeen: c.last_seen || null,
+      firstSeen: c.first_seen || null,
+      online: !!c.is_online,                 // alluser returns offline if disconnected
+      lastRssi: c.rssi ?? null,
+      lastChannel: c.channel ?? null,
+      lastBand: c.radio_proto || c.radio || null,
+      tx: c['tx_bytes'] || 0,
+      rx: c['rx_bytes'] || 0,
+    }));
+    res.json({ ok:true, clients: items });
+  } catch (e) { res.status(500).json({ ok:false, error: e.message }); }
+});
+
 // ─── Time Machine ───
 // Volledige netwerk-state op willekeurig moment (geclamped op snapshot-window).
 app.get('/api/timetravel', (req, res) => {

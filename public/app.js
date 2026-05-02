@@ -1043,7 +1043,116 @@ function refreshReconPage() {
   if (el) el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', refreshReconPage);
 });
 // Periodieke auto-refresh als de tab actief is (data komt via WS)
-setInterval(() => { if (document.body.classList.contains('recon-mode')) refreshReconPage(); }, 5000);
+setInterval(() => {
+  if (document.body.classList.contains('recon-mode')) {
+    refreshReconPage();
+    refreshOfflineClients();
+    refreshDNA();
+  }
+}, 5000);
+
+// ─── OFFLINE clients (afgelopen 24u, niet meer connected) ───
+async function refreshOfflineClients() {
+  const tb = document.getElementById('recon-offline-rows');
+  if (!tb) return;
+  try {
+    const r = await fetch('/api/clients/all', { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) return;
+    const offline = (j.clients || []).filter(c => !c.online);
+    offline.sort((a,b) => (b.lastSeen||0) - (a.lastSeen||0));
+    const channels = (typeof apChannels === 'object') ? apChannels : {};
+    const fmtAgo = ts => {
+      if (!ts) return '—';
+      const sec = Math.floor(Date.now()/1000) - ts;
+      if (sec < 60)   return sec + 's';
+      if (sec < 3600) return Math.floor(sec/60) + 'm';
+      if (sec < 86400) return Math.floor(sec/3600) + 'h';
+      return Math.floor(sec/86400) + 'd';
+    };
+    let html = '';
+    for (const c of offline) {
+      const apN = (channels[c.ap]?.name) || (apsMap.get(c.ap)?.name) || (c.ap ? c.ap.slice(-5) : '—');
+      const rssiPct = Math.max(5, Math.min(100, ((c.lastRssi||-90) + 90) * 1.4));
+      html += `<tr>
+        <td>${(c.name||'(onbekend)').replace(/</g,'&lt;')}</td>
+        <td class="mono">${c.mac}</td>
+        <td>${(c.oui||'').slice(0,28)}</td>
+        <td>${apN}</td>
+        <td>${(c.ssid||'').replace(/</g,'&lt;')}</td>
+        <td class="r">${c.lastRssi != null ? '<span class="rssi-bar" style="--rssi-pct:'+rssiPct+'%"></span>'+c.lastRssi+' dBm' : '—'}</td>
+        <td class="r">${fmtAgo(c.lastSeen)}</td>
+      </tr>`;
+    }
+    tb.innerHTML = html || '<tr><td colspan="7" style="text-align:center;color:var(--fg-faint);padding:14px">geen offline clients in afgelopen 24u</td></tr>';
+  } catch (e) { console.error('[offline]', e); }
+}
+
+// ─── AP ACTIVITY DNA — 24u utilization heatmap-strip ───
+async function refreshDNA() {
+  const root = document.getElementById('recon-dna');
+  if (!root) return;
+  try {
+    const r = await fetch('/api/trends/radio?hours=24', { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) return;
+    const rows = j.rows || [];
+
+    // Bouw buckets per (ap, band, hour-of-day) → max utilization in dat uur
+    const buckets = {};   // key = ap|band → array van 24 cellen
+    const apNames = new Set();
+    const nowH = new Date(); nowH.setMinutes(0,0,0);
+    const startH = Math.floor(nowH.getTime()/1000) - 23*3600;
+    for (const r of rows) {
+      const ap = r.ap_name || 'unknown';
+      const band = r.band || '?';
+      apNames.add(ap);
+      const key = ap + '|' + band;
+      if (!buckets[key]) buckets[key] = new Array(24).fill(null);
+      const hourIdx = Math.floor((r.ts - startH) / 3600);
+      if (hourIdx < 0 || hourIdx > 23) continue;
+      const u = r.util ?? 0;
+      const cur = buckets[key][hourIdx];
+      buckets[key][hourIdx] = (cur == null) ? u : Math.max(cur, u);
+    }
+
+    const utilBucket = u => {
+      if (u == null) return '';
+      if (u < 1) return 'data-util-1';
+      if (u < 20) return 'data-util-20';
+      if (u < 40) return 'data-util-40';
+      if (u < 60) return 'data-util-60';
+      if (u < 80) return 'data-util-80';
+      return 'data-util-90';
+    };
+    const bandClass = b => b === '6' ? 'b6' : b === '5' ? 'b5' : 'b24';
+
+    // Render: header met uur-as + 1 row per (ap, band)
+    let html = '<div class="dna-axis"><span></span><span class="lab">';
+    for (let i = 0; i < 24; i++) {
+      const h = (new Date((startH + i*3600) * 1000)).getHours();
+      html += `<span>${h%6===0?h+'h':' '}</span>`;
+    }
+    html += '</span></div>';
+
+    const sortedKeys = Object.keys(buckets).sort();
+    for (const key of sortedKeys) {
+      const [ap, band] = key.split('|');
+      const cells = buckets[key];
+      html += `<div class="dna-row">
+        <div class="dna-label">${ap}<span class="band-tag ${bandClass(band)}">${band} GHz</span></div>
+        <div class="dna-strip">`;
+      for (let i = 0; i < 24; i++) {
+        const u = cells[i];
+        const attr = utilBucket(u);
+        const tip = u == null ? 'geen data' : `util ${Math.round(u)}%`;
+        html += `<div class="dna-cell" ${attr} title="${tip}"></div>`;
+      }
+      html += '</div></div>';
+    }
+    root.innerHTML = html || '<div style="padding:14px;color:var(--fg-faint)">geen historie verzameld (komt over enkele minuten)</div>';
+  } catch (e) { console.error('[dna]', e); }
+}
 
 function refreshAlertsPage() {
   const a = collectAlerts();

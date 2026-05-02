@@ -197,6 +197,32 @@
       </section>
 
       <section class="recon-section">
+        <h3>📡 AP ACTIVITY DNA · 24u utilization-heatmap</h3>
+        <div class="recon-note" style="margin: 0 0 14px 0">Per AP/band één rij van 24 cellen (één per uur). Kleur = utilization-intensiteit. Lege cellen = nog geen data verzameld.</div>
+        <div id="recon-dna"></div>
+      </section>
+
+      <section class="recon-section">
+        <h3>👻 OFFLINE clients · gezien in afgelopen 24u</h3>
+        <div class="recon-table-wrap">
+          <table class="tbl recon-table">
+            <thead>
+              <tr>
+                <th>Naam / hostname</th>
+                <th>MAC</th>
+                <th>Fabrikant</th>
+                <th>Laatste AP</th>
+                <th>Laatste SSID</th>
+                <th class="r">Laatste RSSI</th>
+                <th class="r">Laatst gezien</th>
+              </tr>
+            </thead>
+            <tbody id="recon-offline-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="recon-section">
         <h3>CLIENTS · alle wireless clients</h3>
         <div class="recon-table-wrap">
           <table class="tbl recon-table">
