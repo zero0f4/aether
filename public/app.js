@@ -17,7 +17,7 @@ const ui = {
 };
 const sessionStart = Date.now();
 
-const PREFS_KEY = 'wifi-pulse:prefs';
+const PREFS_KEY = 'aether:prefs';
 const I18N = {
   nl: {
     'brand.subtitle': 'live unifi netwerk-verkeer',
@@ -1943,8 +1943,8 @@ setInterval(() => { if (prefs.tab === 'alerts') refreshAlertsPage(); else { /* u
 }}, 3000);
 
 // ─── Bandwidth-quota alerts (per MAC, per dag) ─────────────────────────
-const QUOTA_KEY = 'wifi-pulse:quotas';
-const QUOTA_USAGE_KEY = 'wifi-pulse:quotaUsage';
+const QUOTA_KEY = 'aether:quotas';
+const QUOTA_USAGE_KEY = 'aether:quotaUsage';
 let quotas = {}; let quotaUsage = {};
 try { quotas = JSON.parse(localStorage.getItem(QUOTA_KEY) || '{}'); } catch {}
 try { quotaUsage = JSON.parse(localStorage.getItem(QUOTA_USAGE_KEY) || '{}'); } catch {}
@@ -2055,7 +2055,7 @@ const wan = {
   label: 'WAN',
 };
 
-const STORAGE_KEY = 'wifi-pulse:positions';
+const STORAGE_KEY = 'aether:positions';
 function loadPositions() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
   catch { return {}; }
@@ -4301,14 +4301,14 @@ window.exportSnapshot = function(format) {
   }));
   if (format === 'json') {
     const blob = new Blob([JSON.stringify({ ts, stations: stationsArr, aps: apsArr, neighbors: neighborsArr, wan }, null, 2)], { type: 'application/json' });
-    triggerDownload(blob, `wifi-pulse-${ts}.json`);
+    triggerDownload(blob, `aether-${ts}.json`);
   } else {
     // CSV — alleen stations, meest gevraagd
     const cols = ['name','mac','ip','ssid','band','channel','ap','rssi','snr','noise','rxBps','txBps','txRate','rxRate','os','family','oui'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(',')].concat(stationsArr.map(r => cols.map(c => esc(r[c])).join(','))).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    triggerDownload(blob, `wifi-pulse-stations-${ts}.csv`);
+    triggerDownload(blob, `aether-stations-${ts}.csv`);
   }
 };
 window.runSpeedtest = async function(btn) {
@@ -4331,7 +4331,7 @@ window.exportTopology = function() {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   // Wacht 1 frame, capture canvas (incl. spectrum) als PNG
   canvas.toBlob(blob => {
-    if (blob) triggerDownload(blob, `wifi-pulse-topology-${ts}.png`);
+    if (blob) triggerDownload(blob, `aether-topology-${ts}.png`);
   }, 'image/png');
 };
 

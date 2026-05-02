@@ -27,13 +27,13 @@
   ],
   "author": "zero0f4",
   "license": "MIT",
-  "homepage": "https://github.com/zero0f4/wifi-pulse#readme",
+  "homepage": "https://github.com/zero0f4/aether#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zero0f4/wifi-pulse.git"
+    "url": "git+https://github.com/zero0f4/aether.git"
   },
   "bugs": {
-    "url": "https://github.com/zero0f4/wifi-pulse/issues"
+    "url": "https://github.com/zero0f4/aether/issues"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",

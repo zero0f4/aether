@@ -52,8 +52,8 @@ The repository deliberately ships **without screenshots**. AETHER's UI exposes B
 ## Quick start
 
 ```bash
-git clone https://github.com/zero0f4/wifi-pulse.git
-cd wifi-pulse
+git clone https://github.com/zero0f4/aether.git
+cd aether
 npm install
 
 # Optional but recommended: download the IEEE OUI database for vendor lookup

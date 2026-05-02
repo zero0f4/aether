@@ -12,7 +12,7 @@ intel.loadOui();
 const advisor = require('./advisor');
 
 // ─── Single-instance lock — voorkomt cookie-kaping door stale processen ───
-const PIDFILE = path.join(os.tmpdir(), 'wifi-pulse.pid');
+const PIDFILE = path.join(os.tmpdir(), 'aether.pid');
 const LOCK_PORT = parseInt(process.env.PORT || '3033', 10);
 
 function killPid(pid, label) {
@@ -32,7 +32,7 @@ function killPid(pid, label) {
   // 1. Check pidfile
   try {
     const oldPid = parseInt(fs.readFileSync(PIDFILE, 'utf8').trim(), 10);
-    killPid(oldPid, 'oude wifi-pulse via pidfile');
+    killPid(oldPid, 'oude AETHER via pidfile');
   } catch {}
   // 2. Check welk proces poort 3033 bezet (vangt processen zonder pidfile)
   try {
@@ -272,9 +272,9 @@ if (AUTH_TOKEN || READONLY_TOKEN) {
 }
 
 // ─── Plugin-architectuur ───
-// Elk JS-bestand in ~/.wifi-pulse/plugins/ wordt bij start ingelezen.
+// Elk JS-bestand in ~/.aether/plugins/ wordt bij start ingelezen.
 // Plugin krijgt object: { app, wss, getPayload, addPanel(name, html, opts) }
-const pluginDir = path.join(os.homedir(), '.wifi-pulse', 'plugins');
+const pluginDir = path.join(os.homedir(), '.aether', 'plugins');
 const loadedPanels = []; // [{ id, name, html }]
 function loadPlugins() {
   if (!fs.existsSync(pluginDir)) return;
@@ -612,7 +612,7 @@ app.get('/api/wigle/bssid', async (req, res) => {
   try {
     const auth = 'Basic ' + Buffer.from(user + ':' + key).toString('base64');
     const r = await undiciFetch(`https://api.wigle.net/api/v2/network/search?netid=${encodeURIComponent(bssid)}`, {
-      headers: { 'Authorization': auth, 'Accept': 'application/json', 'User-Agent': 'wifi-pulse' }
+      headers: { 'Authorization': auth, 'Accept': 'application/json', 'User-Agent': 'aether' }
     });
     if (!r.ok) {
       const t = await r.text().catch(()=>'');
@@ -777,10 +777,10 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[wifi-pulse] http://localhost:${PORT}`);
+  console.log(`[aether] http://localhost:${PORT}`);
   loadPlugins();
   if (!UDM_USER || !UDM_PASS) {
-    console.warn('[wifi-pulse] UDM_USER/UDM_PASS niet gezet — vul .env');
+    console.warn('[aether] UDM_USER/UDM_PASS niet gezet — vul .env');
     return;
   }
   login().catch(e => console.error('[login]', e.message));

@@ -202,7 +202,7 @@ async function fetchJson(url, timeoutMs = 8000) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    const r = await request(url, { signal: ac.signal, headers: { 'user-agent': 'wifi-pulse/0.9 (https://github.com/zero0f4/wifi-pulse)' } });
+    const r = await request(url, { signal: ac.signal, headers: { 'user-agent': 'aether/1.x (https://github.com/zero0f4/aether)' } });
     if (r.statusCode >= 400) throw new Error('http ' + r.statusCode);
     return await r.body.json();
   } finally {
