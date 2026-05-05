@@ -11,13 +11,16 @@
 
 AETHER reads live data from a UniFi Dream Machine / Cloud Key / Network Application and renders a complete RF observability surface: a particle-flow topology, a 2.4/5/6 GHz spectrum analyzer, internal/external network reconnaissance, an RF advisor, and a tagged-clients store. Everything runs locally; no telemetry, no external services unless you explicitly enable WiGLE lookups.
 
+![PULSE — live topology with particle streams](docs/screenshots/01-pulse.png)
+*PULSE — live topology with particle streams (synthetic demo data; append `?demo=1` to your URL to see this without a UniFi controller).*
+
 ---
 
 ## ⚠ Disclaimer
 
 **AETHER is in active beta. Bugs, breaking changes, and unfinished features are expected.** Do not use it as your sole monitoring tool. Built primarily for personal/lab use; not security-audited for hostile environments.
 
-The repository deliberately ships **without screenshots**. AETHER's UI exposes BSSIDs, MAC addresses, neighbor SSIDs, WAN IPs and other data that is sensitive when published. To preview the console, run it locally against your own controller — there is no hosted demo.
+All screenshots in this repo use **synthetic demo data** (`?demo=1`). Your live console will show real BSSIDs, MAC addresses, neighbor SSIDs, WAN IPs and other sensitive data — keep that local.
 
 ---
 
@@ -31,6 +34,18 @@ The repository deliberately ships **without screenshots**. AETHER's UI exposes B
 - **EVENTS** — radar-style alerts view (anomalies, weak clients, rogue APs, firmware updates, reboots).
 - **REFERENCE** — educational spectrum overview: 2.4 / 5 / 6 GHz / Zigbee channel allocations under EU regulations, NL ISP defaults, and your own neighbor-AP histogram per channel.
 - **ZIGBEE** *(optional, requires Home Assistant)* — live ZHA mesh graph with coordinator at the center, routers in a ring, end-devices clustered around their best parent-router. Edge color is LQI (green/amber/red), particles flow continuously, hover/click for detail, drag to reposition. A yellow dashed band on the SPECTRUM 2.4 GHz panel shows the Zigbee channel so you can see WiFi/Zigbee overlap in one glance.
+
+![ZIGBEE mesh — coordinator center, routers ring, end-devices clustered around parent](docs/screenshots/02-zigbee.png)
+*ZIGBEE mesh — coordinator center, routers in a ring, end-devices clustered around their best parent-router.*
+
+![ZIGBEE focus mode — particles flowing on selected node](docs/screenshots/02b-zigbee-focus.png)
+*ZIGBEE focus mode — selecting a node dims the rest and animates particles along its mesh edges.*
+
+![SPECTRUM analyzer — 2.4/5/6 GHz with Zigbee-channel overlay](docs/screenshots/03-spectrum.png)
+*SPECTRUM — bell curves on 2.4 GHz with own-AP/foreign-AP/Zigbee-channel overlays; DFS-zone shaded on 5 GHz; full WiFi 6E channel grid.*
+
+![REFERENCE tab — channel allocations + your own neighbor histogram](docs/screenshots/04-reference.png)
+*REFERENCE — educational spectrum overview combined with a live histogram of your neighbor APs per channel.*
 
 ### Intelligence
 - **ADVISOR** — analyzes live state and produces concrete recommendations across nine categories: channel plan (1/6/11 on 2.4, co-channel detection, 6 GHz adoption), channel width (HT 20/40/80/160), DFS usage, firmware updates, mesh uplink quality, coverage gaps, band-steering effectiveness, topology (sub-routers), WAN. Health-score 0–100.
@@ -65,6 +80,10 @@ npm start
 ```
 
 Open <http://localhost:3033>. The first run redirects you to `/setup` to configure the UniFi controller.
+
+### Demo mode
+
+Want to see what AETHER does without owning a UniFi controller? Append `?demo=1` to the URL — e.g. <http://localhost:3033/?demo=1>. The frontend then replaces the live WebSocket with a synthetic feed (2 fake APs, 30 fake clients, 80 neighbor APs, a 18-device fake Zigbee mesh) so PULSE / SPECTRUM / ZIGBEE / REFERENCE all render with realistic-looking content. INTERN, EXTERN and ADVISOR are live-only.
 
 ### Setup wizard
 

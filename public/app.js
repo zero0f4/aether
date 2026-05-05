@@ -3763,7 +3763,117 @@ function specAnim() {
 }
 requestAnimationFrame(specAnim);
 
+// ─── Demo-mode: synthetische data zodat bezoekers zonder UniFi-controller
+// een werkende AETHER zien. Activeer via ?demo=1 in de URL.
+const IS_DEMO = new URLSearchParams(location.search).get('demo') === '1';
+function demoTick() {
+  // Twee fake-APs en ~30 fake-clients met plausibele banden/RSSI/SSID
+  const now = Date.now();
+  const apA = '02:00:0a:00:00:01';
+  const apB = '02:00:0a:00:00:02';
+  const SSID = 'DemoNet';
+  const SSID_IOT = 'DemoNet-IoT';
+  const ssidPool = ['Coffee-Shop-WiFi', 'Neighbor-5GHz', 'TP-LINK_4F2A', 'eduroam', 'TelekomFON', 'KPN-Fiber', 'Ziggo-2.4', 'Speedport_W921', 'eero-IoT', 'Nest-Guest'];
+  if (!demoTick.state) {
+    const names = ['iPhone-Living', 'iPad-Kitchen', 'Laptop-Office', 'MacBook-Bedroom', 'TV-Living', 'Sonos-Beam', 'Hue-Bridge', 'Ring-Doorbell', 'Echo-Dot', 'Roomba-i7', 'Nest-Hub', 'Philips-TV', 'Synology-NAS', 'Printer-Office', 'Smart-Plug-1', 'Smart-Plug-2', 'Tado-Thermostat', 'Doorbell-Cam', 'Garage-Cam', 'Watch-Steve', 'Watch-Anna', 'Pixel-Phone', 'Galaxy-Phone', 'Switch-Console', 'PlayStation-5', 'Xbox-Series-X', 'Bambu-X1C', 'Energy-Meter', 'Solar-Inverter', 'Charger-EV'];
+    demoTick.state = { devices: [], wan: { tx: 0, rx: 0, isp: 'Demo ISP', ip: '203.0.113.42', latency: 12, drops: 0 }, neighbors: [], apCh: { [apA]: { name: 'AP-Hallway', model: 'U7-PRO', clientCount: 0, ip: '10.0.0.10', state: 1, channels: [{ band: 'ng', channel: 6, ht: 20, cu_total: 35, cu_self_tx: 18, cu_self_rx: 5, tx_power: 16, radio_name: 'wifi0' }, { band: 'na', channel: 36, ht: 80, cu_total: 12, cu_self_tx: 6, cu_self_rx: 1, tx_power: 17, radio_name: 'wifi1' }, { band: '6e', channel: 37, ht: 160, cu_total: 4, cu_self_tx: 2, cu_self_rx: 0, tx_power: 17, radio_name: 'wifi2' }] }, [apB]: { name: 'AP-Garage', model: 'U7-PRO', clientCount: 0, ip: '10.0.0.11', state: 1, channels: [{ band: 'ng', channel: 11, ht: 20, cu_total: 28, cu_self_tx: 14, cu_self_rx: 4, tx_power: 14, radio_name: 'wifi0' }, { band: 'na', channel: 149, ht: 80, cu_total: 8, cu_self_tx: 4, cu_self_rx: 0, tx_power: 18, radio_name: 'wifi1' }, { band: '6e', channel: 69, ht: 320, cu_total: 6, cu_self_tx: 3, cu_self_rx: 0, tx_power: 18, radio_name: 'wifi2' }] } } };
+    names.forEach((n, i) => {
+      const ap = i % 3 === 0 ? apB : apA;
+      const bandRoll = Math.random();
+      const band = bandRoll < 0.35 ? 'ng' : bandRoll < 0.85 ? 'na' : '6e';
+      const channel = band === 'ng' ? (ap === apA ? 6 : 11) : band === 'na' ? (ap === apA ? 36 : 149) : (ap === apA ? 37 : 69);
+      demoTick.state.devices.push({
+        id: '02:' + Math.random().toString(16).slice(2, 14).match(/.{2}/g).slice(0, 5).join(':'),
+        name: n,
+        rssi: 90 + Math.floor(Math.random() * 30) - 60,
+        signal: -45 - Math.floor(Math.random() * 35),
+        noise: -95,
+        tx: 50000 + Math.floor(Math.random() * 800000),
+        rx: 50000 + Math.floor(Math.random() * 1500000),
+        txBytes: Math.random() * 2000,
+        rxBytes: Math.random() * 4000,
+        ap, ssid: i % 5 === 0 ? SSID_IOT : SSID,
+        band, radio: band, channel,
+        oui: ['Apple Inc.','Samsung','Google LLC','Sonoff','Sonos','Ubiquiti','Philips Lighting BV','Synology','HomeWizard B.V.'][i % 9],
+        os: 24, family: 9, subrouter: false,
+      });
+    });
+    // Neighbors
+    for (let i = 0; i < 80; i++) {
+      const isDist = i < 25;
+      const ch = isDist ? [1,6,9,11,36,40,44,100,149][i % 9] : (1 + Math.floor(Math.random()*13));
+      demoTick.state.neighbors.push({
+        id: '06:' + Math.random().toString(16).slice(2, 14).match(/.{2}/g).slice(0, 5).join(':'),
+        ssid: ssidPool[i % ssidPool.length] + (i > 9 ? '-' + i : ''),
+        rssi: -60 - Math.floor(Math.random()*30),
+        channel: ch, band: ch <= 14 ? 'ng' : ch >= 36 && ch <= 165 ? 'na' : '6e',
+        seenBy: i % 2 === 0 ? apA : apB,
+        disturbing: isDist,
+      });
+    }
+  }
+  const s = demoTick.state;
+  // Wat throughput-jitter zodat het levend lijkt
+  s.wan.tx = 200000 + Math.sin(now / 1000) * 80000 + Math.random() * 50000;
+  s.wan.rx = 800000 + Math.sin(now / 1500) * 200000 + Math.random() * 100000;
+  s.wan.latency = 8 + Math.random() * 20;
+  for (const d of s.devices) {
+    d.tx = Math.max(0, d.tx + (Math.random() - 0.5) * 50000);
+    d.rx = Math.max(0, d.rx + (Math.random() - 0.5) * 80000);
+    d.signal = Math.max(-90, Math.min(-30, d.signal + (Math.random() - 0.5) * 2));
+  }
+  s.apCh[apA].clientCount = s.devices.filter(d => d.ap === apA).length;
+  s.apCh[apB].clientCount = s.devices.filter(d => d.ap === apB).length;
+  return { devices: s.devices, neighbors: s.neighbors, wan: s.wan, apChannels: s.apCh, ts: now };
+}
+
 function connect() {
+  if (IS_DEMO) {
+    const handle = (data) => {
+      const ev = { data: JSON.stringify(data) };
+      // Simuleer message-handler logica via een dummy WS-object met onmessage gezet hieronder
+      fakeWs.onmessage(ev);
+    };
+    const fakeWs = {
+      onmessage: null,
+      onopen: null,
+      onclose: null,
+      onerror: null,
+      close: () => {},
+    };
+    setTimeout(() => fakeWs.onopen && fakeWs.onopen(), 50);
+    setInterval(() => fakeWs.onmessage && fakeWs.onmessage({ data: JSON.stringify(demoTick()) }), 1500);
+    // Hergebruik dezelfde handlers als WS-flow
+    fakeWs.onopen = () => { ui.status.textContent = '◉ DEMO · synthetische data'; };
+    fakeWs.onmessage = ev => {
+      try {
+        const { devices, neighbors: nbs = [], wan: wanData, apChannels: apCh = {} } = JSON.parse(ev.data);
+        apChannels = apCh;
+        if (wanData) {
+          wan.txBps = wanData.tx || 0;
+          wan.rxBps = wanData.rx || 0;
+          wan.txBusy = Math.min(1, Math.pow(wan.txBps / 200000, 0.7));
+          wan.rxBusy = Math.min(1, Math.pow(wan.rxBps / 800000, 0.7));
+          wan.busy = Math.min(1, Math.pow((wan.txBps + wan.rxBps) / 1000000, 0.7));
+          wan.isp = wanData.isp || ''; wan.ip = wanData.ip || '';
+          wan.latency = wanData.latency; wan.drops = wanData.drops;
+          if (wanData.latency != null) {
+            wanLatencyHistory.push({ t: Date.now(), v: wanData.latency });
+            if (wanLatencyHistory.length > 60) wanLatencyHistory.shift();
+          }
+        }
+        ui.status.textContent = '◉ DEMO · ' + devices.length + ' stations · ' + nbs.length + ' ext';
+        const seen = new Set();
+        for (const d of devices) { seen.add(d.id); const s = stations.get(d.id); if (s) s.update(d); else stations.set(d.id, new Station(d)); }
+        for (const id of stations.keys()) if (!seen.has(id)) stations.delete(id);
+        const seenN = new Set();
+        for (const n of nbs) { seenN.add(n.id); const ex = neighbors.get(n.id); if (ex) ex.update(n); else neighbors.set(n.id, new Neighbor(n)); }
+        for (const id of neighbors.keys()) if (!seenN.has(id)) neighbors.delete(id);
+      } catch (e) { console.error(e); }
+    };
+    fakeWs.onmessage({ data: JSON.stringify(demoTick()) });
+    return;
+  }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = () => { ui.status.textContent = '◉ ' + t('status.live', { n: stations.size }); };
@@ -4719,7 +4829,55 @@ let zbDragOffset = { x: 0, y: 0 };
 let zbActivity = new Map(); // ieee -> { ts: lastChange, intensity }
 let zbLayoutCache = null;
 
+function demoZigbee() {
+  // Synthetische ZHA mesh: 1 coordinator, 5 routers, 12 end-devices
+  const ieeeOf = i => '00:00:00:00:00:00:00:' + i.toString(16).padStart(2, '0');
+  const coord = ieeeOf(0);
+  const routers = [
+    { ieee: ieeeOf(1), name: 'Plug-Living', model: 'Vendor/SmartPlug' },
+    { ieee: ieeeOf(2), name: 'Plug-Kitchen', model: 'Vendor/SmartPlug' },
+    { ieee: ieeeOf(3), name: 'Plug-Garage', model: 'Vendor/SmartPlug' },
+    { ieee: ieeeOf(4), name: 'Plug-Office', model: 'Vendor/SmartPlug' },
+    { ieee: ieeeOf(5), name: 'Plug-Bedroom', model: 'Vendor/SmartPlug' },
+  ];
+  const ends = [
+    { ieee: ieeeOf(10), name: 'Door-Front', model: 'Sensor/DoorContact', parent: 1 },
+    { ieee: ieeeOf(11), name: 'Door-Back', model: 'Sensor/DoorContact', parent: 1 },
+    { ieee: ieeeOf(12), name: 'Door-Garage', model: 'Sensor/DoorContact', parent: 3 },
+    { ieee: ieeeOf(13), name: 'Temp-Living', model: 'Sensor/TempHumidity', parent: 1 },
+    { ieee: ieeeOf(14), name: 'Temp-Kitchen', model: 'Sensor/TempHumidity', parent: 2 },
+    { ieee: ieeeOf(15), name: 'Temp-Bedroom', model: 'Sensor/TempHumidity', parent: 5 },
+    { ieee: ieeeOf(16), name: 'Temp-Office', model: 'Sensor/TempHumidity', parent: 4 },
+    { ieee: ieeeOf(17), name: 'Temp-Outdoor', model: 'Sensor/TempHumidity', parent: 3 },
+    { ieee: ieeeOf(18), name: 'Motion-Hallway', model: 'Sensor/Motion', parent: 1 },
+    { ieee: ieeeOf(19), name: 'Motion-Garage', model: 'Sensor/Motion', parent: 3 },
+    { ieee: ieeeOf(20), name: 'LightRain-Outdoor', model: 'Sensor/LightRain', parent: 3 },
+    { ieee: ieeeOf(21), name: 'Button-Bedroom', model: 'Sensor/Button', parent: 5 },
+  ];
+  const devs = [];
+  devs.push({ ieee: coord, name: 'Coordinator', model: 'Vendor/Stick', kind: 'coordinator', available: true, lqi: 255, rssi: 0, neighbors: routers.map(r => ({ ieee: r.ieee, lqi: 140 + Math.floor(Math.random() * 80), relationship: 'Child', depth: 1 })) });
+  for (const r of routers) {
+    const sibs = routers.filter(x => x.ieee !== r.ieee).map(x => ({ ieee: x.ieee, lqi: 80 + Math.floor(Math.random() * 100), relationship: 'Sibling', depth: 1 }));
+    const kids = ends.filter(e => routers[e.parent - 1] && routers[e.parent - 1].ieee === r.ieee).map(e => ({ ieee: e.ieee, lqi: 100 + Math.floor(Math.random() * 100), relationship: 'Child', depth: 2 }));
+    devs.push({ ieee: r.ieee, name: r.name, model: r.model, kind: 'router', available: true, lqi: 130 + Math.floor(Math.random() * 80), rssi: -60 - Math.floor(Math.random() * 20), neighbors: [{ ieee: coord, lqi: 130, relationship: 'Parent', depth: 0 }, ...sibs, ...kids] });
+  }
+  for (const e of ends) {
+    devs.push({ ieee: e.ieee, name: e.name, model: e.model, kind: 'end', available: Math.random() > 0.05, lqi: 80 + Math.floor(Math.random() * 120), rssi: -65 - Math.floor(Math.random() * 25), neighbors: [] });
+  }
+  return { ok: true, channel: 25, panId: 0xBEEF, coordinator: coord, devices: devs, ts: Date.now() / 1000, source: 'demo' };
+}
+
 async function fetchZigbeeInfo() {
+  if (IS_DEMO) {
+    const detect = performance.now();
+    const j = demoZigbee();
+    // First-load: fully populate prev-state to avoid flicker
+    for (const d of j.devices) zbPrevByIeee.set(d.ieee, d);
+    zigbeeInfo = j;
+    updateZigbeeOverlapHint();
+    if (prefs.tab === 'zigbee') refreshZigbee();
+    return;
+  }
   try {
     const r = await fetch('/api/zigbee/info');
     const j = await r.json();
