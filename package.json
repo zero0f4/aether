@@ -1,7 +1,7 @@
 {
   "name": "aether",
-  "version": "1.1.0",
-  "description": "AETHER — Wireless Network Intelligence Console for UniFi controllers. RF observability, neighborhood reconnaissance, advisor, time machine, all local.",
+  "version": "1.3.0",
+  "description": "AETHER — Wireless Network Intelligence Console for UniFi controllers. RF observability, neighborhood reconnaissance, RF reference, advisor, time machine, optional ZHA Zigbee mesh visualisation, all local.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -23,7 +23,10 @@
     "wardrive",
     "wigle",
     "advisor",
-    "rf-advisor"
+    "rf-advisor",
+    "zigbee",
+    "zha",
+    "home-assistant"
   ],
   "author": "zero0f4",
   "license": "MIT",

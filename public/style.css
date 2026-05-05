@@ -314,6 +314,8 @@ body.recon-mode #stage { display: none !important; }
 body.intern-mode #intern-page { display: block; }
 body.extern-mode #extern-page { display: block; }
 body.advisor-mode #advisor-page { display: block; }
+body.zigbee-mode #zigbee-page { display: block; }
+body.reference-mode #reference-page { display: block; }
 body.recon-mode .back-btn { display: inline-flex; }
 
 .recon-page { display: none; padding: 80px 30px 40px; max-width: 1500px; margin: 0 auto; }

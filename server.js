@@ -312,12 +312,47 @@ app.get('/api/setup/current', (_, res) => {
     PORT: process.env.PORT || '3033',
     POLL_MS: process.env.POLL_MS || '1500',
     WIGLE_USER: process.env.WIGLE_USER || '',
+    HA_URL: process.env.HA_URL || '',
     RETENTION_DAYS: process.env.RETENTION_DAYS || '7',
     hasPassword: !!process.env.UDM_PASS,
     hasWigleKey: !!process.env.WIGLE_KEY,
+    hasHaToken: !!process.env.HA_TOKEN,
     hasAuthToken: !!process.env.AUTH_TOKEN,
     hasReadonlyToken: !!process.env.READONLY_TOKEN,
   });
+});
+
+// Test HA-koppeling: opent kortstondig WS naar opgegeven HA-host en haalt zha/devices op
+app.post('/api/setup/zigbee-test', express.json(), async (req, res) => {
+  const url = req.body?.HA_URL || '';
+  let token = req.body?.HA_TOKEN || '';
+  if (!token && process.env.HA_TOKEN) token = process.env.HA_TOKEN;
+  if (!url || !token) return res.json({ ok: false, error: 'HA_URL en HA_TOKEN zijn verplicht' });
+  try {
+    const wsUrl = url.replace(/^http/, 'ws') + '/api/websocket';
+    const WS = require('ws');
+    const sock = new WS(wsUrl, { handshakeTimeout: 5000 });
+    let nextId = 1; let done = false;
+    const result = await new Promise((resolve) => {
+      const timer = setTimeout(() => { if (!done) { done = true; try { sock.terminate(); } catch {}; resolve({ ok:false, error:'timeout' }); } }, 8000);
+      sock.on('error', e => { if (!done) { done = true; clearTimeout(timer); resolve({ ok:false, error:e.message }); } });
+      sock.on('message', raw => {
+        let m; try { m = JSON.parse(raw); } catch { return; }
+        if (m.type === 'auth_required') sock.send(JSON.stringify({ type:'auth', access_token: token }));
+        else if (m.type === 'auth_invalid') { if (!done) { done = true; clearTimeout(timer); sock.close(); resolve({ ok:false, error:'token ongeldig' }); } }
+        else if (m.type === 'auth_ok') sock.send(JSON.stringify({ id: nextId++, type:'zha/devices' }));
+        else if (m.type === 'result') {
+          if (!done) {
+            done = true; clearTimeout(timer);
+            if (m.success) resolve({ ok:true, deviceCount: (m.result || []).length });
+            else resolve({ ok:false, error: 'ZHA niet gevonden — is de ZHA-integratie actief in HA?' });
+            try { sock.close(); } catch {}
+          }
+        }
+      });
+    });
+    res.json(result);
+  } catch (e) { res.json({ ok:false, error: e.message }); }
 });
 
 // Setup endpoints
@@ -354,6 +389,8 @@ app.post('/api/setup/save', express.json(), async (req, res) => {
   };
   const wigleUser = keep(v.WIGLE_USER, 'WIGLE_USER');
   const wigleKey  = keep(v.WIGLE_KEY,  'WIGLE_KEY');
+  const haUrl     = keep(v.HA_URL, 'HA_URL');
+  const haTok     = keep(v.HA_TOKEN, 'HA_TOKEN');
   const authTok   = keep(v.AUTH_TOKEN, 'AUTH_TOKEN');
   const roTok     = keep(v.READONLY_TOKEN, 'READONLY_TOKEN');
   const retain    = keep(v.RETENTION_DAYS, 'RETENTION_DAYS') || '7';
@@ -378,6 +415,10 @@ app.post('/api/setup/save', express.json(), async (req, res) => {
     `WIGLE_USER=${clean(wigleUser)}`,
     `WIGLE_KEY=${clean(wigleKey)}`,
     '',
+    '# Home Assistant ZHA-koppeling (optioneel — activeert ZIGBEE-tab)',
+    `HA_URL=${clean(haUrl)}`,
+    `HA_TOKEN=${clean(haTok)}`,
+    '',
     '# Authenticatie (optioneel — laat leeg voor open toegang)',
     `AUTH_TOKEN=${clean(authTok)}`,
     `READONLY_TOKEN=${clean(roTok)}`,
@@ -392,6 +433,146 @@ app.post('/api/setup/save', express.json(), async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/health', (_, res) => res.json({ ok: true, host: UDM_HOST, site: ACTIVE_SITE }));
+
+// ─── Zigbee (ZHA) info via HA WebSocket API ──────────────────────────────
+// Auth via long-lived JWT. Fallback naar SSH-cache als HA_TOKEN ontbreekt.
+const ZIGBEE_CACHE = path.join(__dirname, 'zigbee-cache.json');
+const ZIGBEE_REFRESH_MS = parseInt(process.env.ZIGBEE_REFRESH_MS || '15000', 10);
+const HA_URL = process.env.HA_URL || '';
+const HA_TOKEN = process.env.HA_TOKEN || '';
+const ZIGBEE_HA_HOST = process.env.ZIGBEE_HA_HOST || '';
+let lastZigbee = null;
+
+function classifyKind(d) {
+  if (d.device_type === 'Coordinator') return 'coordinator';
+  if (d.device_type === 'Router') return 'router';
+  return 'end';
+}
+
+function transformZhaDevices(devs) {
+  // Vorm: { channel, panId, coordinator, devices:[...], ts }
+  // Channel/panId zijn niet in zha/devices — laat lastZigbee.channel doorlopen of bewaar van oude cache
+  const coord = devs.find(d => d.device_type === 'Coordinator');
+  const out = devs.map(d => ({
+    ieee: d.ieee,
+    nwk: parseInt(d.nwk, 16) || 0,
+    name: d.user_given_name || d.name || d.ieee.slice(-8),
+    model: `${d.manufacturer || '?'}/${d.model || '?'}`,
+    kind: classifyKind(d),
+    available: !!d.available,
+    last_seen: d.last_seen,
+    power_source: d.power_source,
+    lqi: typeof d.lqi === 'number' ? d.lqi : (parseInt(d.lqi, 10) || null),
+    rssi: typeof d.rssi === 'number' ? d.rssi : null,
+    neighbors: (d.neighbors || []).map(n => ({
+      ieee: n.ieee,
+      lqi: parseInt(n.lqi, 10) || 0,
+      relationship: n.relationship,
+      depth: parseInt(n.depth, 10) || 0,
+    })),
+  }));
+  return {
+    channel: lastZigbee?.channel ?? null,
+    panId: lastZigbee?.panId ?? null,
+    coordinator: coord?.ieee || null,
+    devices: out,
+    ts: Date.now() / 1000,
+    source: 'ha-ws',
+  };
+}
+
+function fetchViaHaWs() {
+  return new Promise((resolve, reject) => {
+    if (!HA_URL || !HA_TOKEN) return reject(new Error('no HA_URL/HA_TOKEN'));
+    const wsUrl = HA_URL.replace(/^http/, 'ws') + '/api/websocket';
+    const WS = require('ws');
+    const sock = new WS(wsUrl, { handshakeTimeout: 5000 });
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; try { sock.terminate(); } catch {}; reject(new Error('timeout')); } }, 8000);
+    let nextId = 1;
+    sock.on('open', () => {});
+    sock.on('error', e => { if (!done) { done = true; clearTimeout(timer); reject(e); } });
+    sock.on('message', raw => {
+      let m; try { m = JSON.parse(raw); } catch { return; }
+      if (m.type === 'auth_required') {
+        sock.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
+      } else if (m.type === 'auth_invalid') {
+        if (!done) { done = true; clearTimeout(timer); sock.close(); reject(new Error('auth_invalid')); }
+      } else if (m.type === 'auth_ok') {
+        sock.send(JSON.stringify({ id: nextId++, type: 'zha/devices' }));
+      } else if (m.type === 'result') {
+        if (!done) {
+          done = true; clearTimeout(timer);
+          if (m.success) resolve(m.result || []);
+          else reject(new Error('zha/devices: ' + JSON.stringify(m.error)));
+          try { sock.close(); } catch {}
+        }
+      }
+    });
+  });
+}
+
+function refreshZigbeeViaSsh() {
+  if (!ZIGBEE_HA_HOST) return Promise.reject(new Error('no ZIGBEE_HA_HOST'));
+  return new Promise((resolve, reject) => {
+    const { exec } = require('child_process');
+    const cmd = `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@${ZIGBEE_HA_HOST} 'python3 /config/scripts/dump-zigbee.py'`;
+    exec(cmd, { timeout: 15000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return reject(err);
+      try { resolve(JSON.parse(stdout)); } catch (e) { reject(e); }
+    });
+  });
+}
+
+async function refreshZigbeeCache() {
+  // Voorkeur: HA WebSocket. Fallback: SSH (channel/panId via zigbee.db backup).
+  try {
+    const devs = await fetchViaHaWs();
+    const data = transformZhaDevices(devs);
+    // Channel/panId aanvullen via SSH als die nog ontbreekt (komt niet uit zha/devices)
+    if (data.channel == null && ZIGBEE_HA_HOST) {
+      try {
+        const ssh = await refreshZigbeeViaSsh();
+        data.channel = ssh.channel;
+        data.panId = ssh.panId;
+      } catch (e) { /* mag falen */ }
+    }
+    lastZigbee = data;
+    fs.writeFileSync(ZIGBEE_CACHE, JSON.stringify(data));
+    return;
+  } catch (e) {
+    console.error('[zigbee] HA WS faalde:', e.message);
+  }
+  // Fallback: SSH
+  if (ZIGBEE_HA_HOST) {
+    try {
+      const data = await refreshZigbeeViaSsh();
+      data.source = 'ssh';
+      lastZigbee = data;
+      fs.writeFileSync(ZIGBEE_CACHE, JSON.stringify(data));
+    } catch (e) {
+      console.error('[zigbee] SSH fallback faalde:', e.message);
+    }
+  }
+}
+
+if (HA_URL && HA_TOKEN) {
+  refreshZigbeeCache();
+  setInterval(refreshZigbeeCache, ZIGBEE_REFRESH_MS);
+  console.log(`[zigbee] HA WebSocket actief — ${HA_URL}, refresh=${ZIGBEE_REFRESH_MS}ms`);
+} else if (ZIGBEE_HA_HOST) {
+  refreshZigbeeCache();
+  setInterval(refreshZigbeeCache, parseInt(process.env.ZIGBEE_SSH_REFRESH_MS || '30000', 10));
+  console.log(`[zigbee] SSH-only fallback — host=${ZIGBEE_HA_HOST}`);
+}
+app.get('/api/zigbee/info', (_, res) => {
+  try {
+    if (lastZigbee) return res.json({ ok: true, ...lastZigbee });
+    if (!fs.existsSync(ZIGBEE_CACHE)) return res.json({ ok: false, reason: 'no-cache' });
+    const data = JSON.parse(fs.readFileSync(ZIGBEE_CACHE, 'utf8'));
+    res.json({ ok: true, ...data });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 
 app.get('/api/diag/find-client', async (req, res) => {
   try {

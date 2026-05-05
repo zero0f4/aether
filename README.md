@@ -29,6 +29,8 @@ The repository deliberately ships **without screenshots**. AETHER's UI exposes B
 - **EXTERN** — neighborhood APs (rogue/disturbing detection), transient stations (privacy-MAC / unknown-vendor / short-session passers).
 - **SPECTRUM** — fullscreen analyzer for 2.4 GHz (bell-curves), 5 GHz (DFS marked), 6 GHz.
 - **EVENTS** — radar-style alerts view (anomalies, weak clients, rogue APs, firmware updates, reboots).
+- **REFERENCE** — educational spectrum overview: 2.4 / 5 / 6 GHz / Zigbee channel allocations under EU regulations, NL ISP defaults, and your own neighbor-AP histogram per channel.
+- **ZIGBEE** *(optional, requires Home Assistant)* — live ZHA mesh graph with coordinator at the center, routers in a ring, end-devices clustered around their best parent-router. Edge color is LQI (green/amber/red), particles flow continuously, hover/click for detail, drag to reposition. A yellow dashed band on the SPECTRUM 2.4 GHz panel shows the Zigbee channel so you can see WiFi/Zigbee overlap in one glance.
 
 ### Intelligence
 - **ADVISOR** — analyzes live state and produces concrete recommendations across nine categories: channel plan (1/6/11 on 2.4, co-channel detection, 6 GHz adoption), channel width (HT 20/40/80/160), DFS usage, firmware updates, mesh uplink quality, coverage gaps, band-steering effectiveness, topology (sub-routers), WAN. Health-score 0–100.
@@ -71,7 +73,29 @@ The setup page (`/setup`) is sectioned into:
 1. **UniFi controller** (required) — host, username, password, site. Use a **read-only local admin** in the UniFi controller (`Settings → Admins & Users → Create New Admin → Restrict to local access only → View Only`). AETHER never needs write access.
 2. **Server & data retention** (optional) — HTTP port, poll interval, retention days for historical SQLite data.
 3. **WiGLE.net wardrive lookup** (optional) — paste your userId/token from <https://wigle.net/account>.
-4. **Access control** (optional) — generate full-access / read-only API tokens.
+4. **Zigbee · Home Assistant** (optional) — see [Zigbee integration](#zigbee-integration-optional) below.
+5. **Access control** (optional) — generate full-access / read-only API tokens.
+
+### Zigbee integration (optional)
+
+Activates the **ZIGBEE** tab and the Zigbee-channel overlay on **SPECTRUM**.
+
+**Requirements:**
+- Home Assistant with the **ZHA** integration enabled. Zigbee2MQTT is **not** supported (different API surface).
+- AETHER must be able to reach HA over `http(s)://host:port`.
+- A **long-lived access token** in HA: profile (bottom-left) → **Security** tab → **Long-Lived Access Tokens** → *Create token*. Tokens are valid for 10 years.
+
+**Configure** via `/setup` → *Zigbee · Home Assistant koppeling*:
+- `HA_URL` — e.g. `http://homeassistant.local:8123`
+- `HA_TOKEN` — paste the long-lived token
+
+Click **test verbinding** to verify; AETHER opens a brief WebSocket to `/api/websocket`, authenticates, and calls `zha/devices`. On success it shows the device count.
+
+**What AETHER reads from HA:** only the `zha/devices` WebSocket command (read-only). It returns a list of Zigbee devices with manufacturer, model, LQI, RSSI, last-seen, neighbors, and link relationships. **No write actions** are performed against HA. The token is stored in `.env` (chmod 0600) and never sent anywhere except to your HA host.
+
+**Refresh interval:** `ZIGBEE_REFRESH_MS` (default 15 000 ms). The frontend polls `/api/zigbee/info` every 10 s while the ZIGBEE tab is open.
+
+**Privacy note:** the Zigbee mesh data contains your custom device names (e.g. *Front Door Sensor*, *Bedroom Temp*). The `zigbee-cache.json` file is gitignored. Don't commit your runtime cache.
 
 ---
 
@@ -90,6 +114,9 @@ All configuration lives in `.env` (chmod 0600). The setup wizard writes this fil
 | `RETENTION_DAYS` | `7` | Days of history kept in `data.db` |
 | `WIGLE_USER` | — | WiGLE userId (optional) |
 | `WIGLE_KEY` | — | WiGLE API token (optional) |
+| `HA_URL` | — | Home Assistant base URL for ZHA Zigbee integration (optional) |
+| `HA_TOKEN` | — | HA long-lived access token (optional) |
+| `ZIGBEE_REFRESH_MS` | `15000` | Backend Zigbee poll interval in ms |
 | `AUTH_TOKEN` | — | Bearer token for full API access (optional) |
 | `READONLY_TOKEN` | — | Bearer token for read-only access (optional) |
 
@@ -114,6 +141,8 @@ All configuration lives in `.env` (chmod 0600). The setup wizard writes this fil
 | `/api/wigle/bssid?bssid=...` | GET | WiGLE wardrive lookup (requires creds) |
 | `/api/notes/:key` | GET/PUT/DELETE | Notes/tags on BSSID/MAC |
 | `/api/advisor` | GET | RF & config recommendations |
+| `/api/zigbee/info` | GET | ZHA mesh state (only with `HA_URL`/`HA_TOKEN`) |
+| `/api/setup/zigbee-test` | POST | Verify HA WebSocket reachability |
 
 ---
 

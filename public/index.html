@@ -38,6 +38,8 @@
       <button class="tab-btn" data-tab="intern">INTERN</button>
       <button class="tab-btn" data-tab="extern">EXTERN</button>
       <button class="tab-btn" data-tab="spectrum">SPECTRUM</button>
+      <button class="tab-btn" data-tab="zigbee">ZIGBEE</button>
+      <button class="tab-btn" data-tab="reference">REFERENCE</button>
       <button class="tab-btn" data-tab="advisor">ADVISOR</button>
       <button class="tab-btn alerts-tab" data-tab="alerts">EVENTS<span class="alerts-badge" id="alerts-badge" style="display:none">0</span></button>
     </nav>
@@ -311,6 +313,121 @@
   <!-- ─────────────────────────────────────────────────────────
        ADVISOR — analyse + concrete aanbevelingen
        ───────────────────────────────────────────────────────── -->
+  <section class="recon-page page" id="zigbee-page">
+    <div class="page-head">
+      <h2 class="page-title">ZIGBEE · mesh &amp; kanaal</h2>
+      <div class="page-meta">
+        <span>kanaal <b id="zb-channel">—</b></span>
+        <span>PAN <b id="zb-pan">—</b></span>
+        <span><b id="zb-total">—</b> devices</span>
+        <span><b id="zb-routers">—</b> routers</span>
+        <span><b id="zb-end">—</b> end-devices</span>
+        <span class="zb-warn" id="zb-overlap" style="display:none;color:#ffc14e">⚠ overlap met WiFi <b id="zb-overlap-ch"></b></span>
+      </div>
+      <div class="toolbar">
+        <button class="tag tag--btn" id="zb-refresh" type="button">↻ ververs</button>
+      </div>
+    </div>
+    <div class="recon-body">
+      <section class="recon-section">
+        <div style="position:relative;width:100%;height:560px;background:#0a0e0c;border-radius:8px;overflow:hidden">
+          <canvas id="zb-mesh" style="width:100%;height:100%;display:block"></canvas>
+        </div>
+      </section>
+      <section class="recon-section">
+        <h3>Devices</h3>
+        <table class="recon-table" id="zb-table">
+          <thead><tr><th>naam</th><th>type</th><th>model</th><th>links</th><th>beste LQI</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </section>
+
+  <section class="recon-page page" id="reference-page">
+    <div class="page-head">
+      <h2 class="page-title">REFERENCE · spectrum &amp; kanalen NL</h2>
+      <div class="page-meta">
+        <span>scan-buren: <b id="ref-neighbor-count">—</b></span>
+      </div>
+    </div>
+    <div class="recon-body">
+
+      <section class="recon-section">
+        <h3>2.4 GHz · 802.11b/g/n/ax</h3>
+        <p class="ref-intro">EU staat kanaal 1–13 toe (max 100 mW EIRP). Alleen <b>1, 6 en 11</b> zijn niet-overlappend bij 20 MHz breedte. Kanalen daartussen zijn meestal slecht — buren bijten elkaar.</p>
+        <canvas id="ref-spec24" style="width:100%;height:180px;display:block;background:#0a0e0c;border-radius:8px"></canvas>
+        <table class="recon-table" style="margin-top:14px">
+          <thead><tr><th>kanaal</th><th>centerfreq</th><th>buren bij jou</th><th>aanbevolen</th><th>opmerking</th></tr></thead>
+          <tbody id="ref-24tbl"></tbody>
+        </table>
+        <p style="margin-top:12px;color:#9ab;font-size:12px">⚠ <b>Zigbee 11–26 deelt dit spectrum.</b> Zigbee-11 (2405 MHz) overlapt met WiFi-1, Zigbee-25/26 zit boven WiFi-13 en is meestal vrij. Bluetooth hopt over de hele band.</p>
+      </section>
+
+      <section class="recon-section">
+        <h3>5 GHz · 802.11ac/ax/be</h3>
+        <p class="ref-intro">Drie blokken in EU. <b>UNII-1</b> (36-48) altijd vrij maar maar 4 kanalen breed. <b>DFS</b> (52-144) heeft meer ruimte maar AP kan tot 30 min uit door radar-detectie (weer/luchtvaart). <b>UNII-3</b> (149-161) kan op nieuwere firmware met EU-cert (afhankelijk van AP-model).</p>
+        <canvas id="ref-spec5" style="width:100%;height:180px;display:block;background:#0a0e0c;border-radius:8px"></canvas>
+        <table class="recon-table" style="margin-top:14px">
+          <thead><tr><th>zone</th><th>kanalen</th><th>DFS?</th><th>max EIRP</th><th>buren bij jou</th><th>opmerking</th></tr></thead>
+          <tbody id="ref-5tbl"></tbody>
+        </table>
+      </section>
+
+      <section class="recon-section">
+        <h3>6 GHz · WiFi 6E/7</h3>
+        <p class="ref-intro">EU: 5925–6425 MHz (Lower 6 GHz). LPI-mode (Low Power Indoor): max 250 mW EIRP, geen DFS-equivalent. Standard Power vereist AFC-coördinatie en wordt in NL nog niet uitgerold. 59 kanalen 20 MHz breed, of 14 kanalen 80 MHz, of 7 kanalen 160 MHz, of 3 kanalen 320 MHz.</p>
+        <table class="recon-table" style="margin-top:14px">
+          <thead><tr><th>HT-breedte</th><th>aantal kanalen</th><th>typisch gebruik</th></tr></thead>
+          <tbody>
+            <tr><td>20 MHz</td><td>59</td><td>IoT-dichtheid, lage interferentie</td></tr>
+            <tr><td>80 MHz</td><td>14</td><td>balans tussen snelheid en spectrum-spread</td></tr>
+            <tr><td>160 MHz</td><td>7</td><td>WiFi 6E volle snelheid (mobiel/laptop)</td></tr>
+            <tr><td>320 MHz</td><td>3</td><td>WiFi 7 max (jouw Garage 6 GHz)</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="recon-section">
+        <h3>Zigbee · 802.15.4 op 2.4 GHz</h3>
+        <p class="ref-intro">16 kanalen (11–26), elk 2 MHz breed. Vermijd kanalen die overlappen met je drukste WiFi. <b>Sweet-spot</b> in dichte buurten: kanalen <b>25/26</b> (boven WiFi-11). Channel-migratie kost 1-3 battery-devices die opnieuw gepaird moeten worden — niet vaak doen.</p>
+        <table class="recon-table" style="margin-top:14px">
+          <thead><tr><th>Zigbee-kanaal</th><th>freq</th><th>botst met WiFi</th><th>aanbevolen</th></tr></thead>
+          <tbody id="ref-zbtbl"></tbody>
+        </table>
+      </section>
+
+      <section class="recon-section">
+        <h3>NL ISP-defaults (vuistregel)</h3>
+        <p class="ref-intro">Wat de mees-geleverde routers standaard doen — verklaart vaak de drukke kanalen in jouw spectrum.</p>
+        <table class="recon-table">
+          <thead><tr><th>provider</th><th>2.4 default</th><th>5 GHz default</th><th>opmerking</th></tr></thead>
+          <tbody>
+            <tr><td>KPN (Experia Box)</td><td>auto, vaak <b>1</b></td><td>36 of 100</td><td>klassieke "buren-op-1"-effect</td></tr>
+            <tr><td>Ziggo (SmartWiFi)</td><td>auto, vaak <b>6</b> of <b>11</b></td><td>36 of 116 (DFS)</td><td>HFC modems clusteren op 6/11</td></tr>
+            <tr><td>Tele2/Odido</td><td>auto</td><td>auto, soms vast 36</td><td>varieert per modem-batch</td></tr>
+            <tr><td>DELTA/Caiway/Freedom</td><td>auto</td><td>auto</td><td>regionaal verschillend</td></tr>
+            <tr><td>XS4ALL (oud)</td><td>vaak <b>11</b></td><td>36/40</td><td>nu KPN-merged</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="recon-section">
+        <h3>Vuistregels voor jouw netwerk</h3>
+        <ul style="line-height:1.8">
+          <li>Kies 2.4 GHz <b>1, 6 of 11</b> — niet ertussen. AETHER-spectrum laat zien welke bij jou het rustigst is.</li>
+          <li>Spreid je AP's: één op 1, één op 6 of 11. Niet beide op hetzelfde.</li>
+          <li>Vermijd 2.4 GHz-overlap met je Zigbee-kanaal. (Jij: <b id="ref-zb-now">—</b>)</li>
+          <li>5 GHz: UNII-1 (36) is veiligst voor stabiele AP's. DFS pas op drukkere AP's met meerdere radio's.</li>
+          <li>6 GHz: hier is altijd ruimte. Als je clients het ondersteunen, gebruik 'm.</li>
+          <li>Min-RSSI op 2.4 GHz radios (-75 dBm) duwt clients naar 5/6 GHz — meer wezenlijk effect dan SSID-tweaks.</li>
+          <li>Tx-power "auto" laten — vol-vermogen ("custom 20 dBm") op 2.4 verstoort meer dan het helpt.</li>
+        </ul>
+      </section>
+
+    </div>
+  </section>
+
   <section class="recon-page page" id="advisor-page">
     <div class="page-head">
       <h2 class="page-title">ADVISOR · RF &amp; configuratie-aanbevelingen</h2>
@@ -474,6 +591,6 @@
     </div>
   </footer>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=orphan2"></script>
 </body>
 </html>

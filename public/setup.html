@@ -289,6 +289,44 @@
       </div>
     </section>
 
+    <!-- ─── Zigbee / HA ─── -->
+    <section class="setup-section collapsed" data-section="zigbee">
+      <div class="setup-section-head" onclick="toggleSection(this)">
+        <h2>Zigbee · Home Assistant koppeling <span class="meta" id="meta-zigbee">optioneel</span></h2>
+        <span class="toggle">▾</span>
+      </div>
+      <div class="setup-section-body">
+        <div class="desc">
+          Activeert de <strong>ZIGBEE-tab</strong> met live mesh-graph (coordinator, routers, end-devices, LQI per link), end-devices die clusteren rond hun parent-router, en een Zigbee-band-overlay op de SPECTRUM 2.4 GHz view zodat je in één oogopslag ziet of WiFi en Zigbee elkaar bijten.
+          <br><br>
+          <strong>Vereisten:</strong>
+          <ul style="margin:6px 0 6px 18px; padding:0; line-height:1.7">
+            <li>Home Assistant met de <strong>ZHA-integratie</strong> actief (Zigbee2MQTT wordt nog niet ondersteund)</li>
+            <li>HA bereikbaar vanaf deze server op http(s)://host:port</li>
+            <li>Een <strong>long-lived access token</strong> uit HA → klik op je profiel (linksonder) → tab <em>Security</em> → onderaan "Long-Lived Access Tokens" → <em>Create token</em></li>
+          </ul>
+          AETHER vraagt alleen-lezen ZHA-data op (devices, neighbors, LQI). Geen schrijf-acties op je HA.
+        </div>
+
+        <div class="field">
+          <label>HA URL
+            <small>bv. <code>http://homeassistant.local:8123</code></small>
+          </label>
+          <input id="ha-url" name="HA_URL" placeholder="http://homeassistant.local:8123" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Long-lived access token
+            <small>JWT, blijft 10 jaar geldig</small>
+          </label>
+          <input id="ha-token" name="HA_TOKEN" type="password" placeholder="eyJhbGciOi…" autocomplete="off">
+        </div>
+        <div class="setup-actions" style="border:0;padding-top:8px">
+          <button type="button" class="btn" onclick="testZigbee()" id="btn-zb-test">test verbinding</button>
+        </div>
+        <div id="msg-zigbee"></div>
+      </div>
+    </section>
+
     <!-- ─── Auth ─── -->
     <section class="setup-section collapsed" data-section="auth">
       <div class="setup-section-head" onclick="toggleSection(this)">
@@ -367,6 +405,14 @@ function toggleSection(head) {
       m.textContent = 'actief';
       m.classList.add('ok');
     }
+    set('ha-url', j.HA_URL);
+    if (j.hasHaToken) {
+      const e = document.getElementById('ha-token');
+      e.placeholder = '••••••••  (huidige behouden)';
+      const m = document.getElementById('meta-zigbee');
+      m.textContent = 'actief';
+      m.classList.add('ok');
+    }
     if (j.hasAuthToken || j.hasReadonlyToken) {
       const m = document.getElementById('meta-auth');
       m.textContent = 'tokens actief';
@@ -388,9 +434,24 @@ function getValues() {
     RETENTION_DAYS: document.getElementById('retention').value.trim() || '7',
     WIGLE_USER: document.getElementById('wigle-user').value.trim(),
     WIGLE_KEY: document.getElementById('wigle-key').value,
+    HA_URL: document.getElementById('ha-url').value.trim(),
+    HA_TOKEN: document.getElementById('ha-token').value,
     AUTH_TOKEN: document.getElementById('auth-token').value,
     READONLY_TOKEN: document.getElementById('readonly-token').value,
   };
+}
+
+async function testZigbee() {
+  const btn = document.getElementById('btn-zb-test');
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'test…';
+  try {
+    const v = getValues();
+    const r = await fetch('/api/setup/zigbee-test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ HA_URL: v.HA_URL, HA_TOKEN: v.HA_TOKEN }) });
+    const j = await r.json();
+    if (j.ok) showMsg('✓ Verbinding OK · ' + j.deviceCount + ' Zigbee-devices gevonden', 'ok', 'msg-zigbee');
+    else showMsg('✗ ' + (j.error || 'onbekende fout'), 'err', 'msg-zigbee');
+  } catch (e) { showMsg('✗ ' + e.message, 'err', 'msg-zigbee'); }
+  btn.disabled = false; btn.textContent = orig;
 }
 
 function showMsg(text, kind, where = 'msg') {

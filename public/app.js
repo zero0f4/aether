@@ -375,7 +375,9 @@ function setTab(tab) {
   document.body.classList.toggle('intern-mode', tab === 'intern');
   document.body.classList.toggle('extern-mode', tab === 'extern');
   document.body.classList.toggle('advisor-mode', tab === 'advisor');
-  document.body.classList.toggle('recon-mode', tab === 'intern' || tab === 'extern' || tab === 'advisor');
+  document.body.classList.toggle('zigbee-mode', tab === 'zigbee');
+  document.body.classList.toggle('reference-mode', tab === 'reference');
+  document.body.classList.toggle('recon-mode', tab === 'intern' || tab === 'extern' || tab === 'advisor' || tab === 'zigbee' || tab === 'reference');
   if (tab === 'alerts') refreshAlertsPage();
   if (tab === 'spectrum') resizeSpectrumCanvases();
   if (tab === 'intern' || tab === 'extern') {
@@ -389,6 +391,8 @@ function setTab(tab) {
     }
   }
   if (tab === 'advisor' && typeof refreshAdvisor === 'function') refreshAdvisor();
+  if (tab === 'zigbee' && typeof refreshZigbee === 'function') refreshZigbee();
+  if (tab === 'reference' && typeof refreshReference === 'function') refreshReference();
 }
 
 // Maak de spectrum-canvases breder als we in fullscreen-mode staan
@@ -2753,10 +2757,49 @@ function drawRoaming() {
 }
 
 function drawAPs() {
+  const tNow = performance.now();
   for (const ap of apsMap.values()) {
     const hover = hoverAP === ap;
     const dragging = drag && drag.ap === ap;
     const accent = hover || dragging ? 1 : 0;
+    const isOrphan = ap.mac === 'unknown';
+
+    if (isOrphan) {
+      // Phantom-bucket in pulse-blauw, dashed
+      const pulse = 0.5 + 0.5 * Math.sin(tNow * 0.003);
+      ctx.strokeStyle = `rgba(120,200,255,${0.55 + pulse * 0.3 + accent * 0.3})`;
+      ctx.lineWidth = 1.2 + accent * 0.6;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(ap.x, ap.y, 9 + pulse * 2 + accent * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Vraagteken-icoon centraal
+      ctx.fillStyle = `rgba(150,210,255,${0.7 + pulse * 0.25})`;
+      ctx.font = '600 12px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', ap.x, ap.y + 0.5);
+      ctx.textBaseline = 'alphabetic';
+
+      // Labels
+      ctx.fillStyle = 'rgba(150,210,255,0.9)';
+      ctx.font = '600 10px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillText('LOSSE CLIENTS' + (ap.pinned ? ' ◎' : ''), ap.x, ap.y - 16);
+      ctx.fillStyle = 'rgba(160,200,230,0.55)';
+      ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillText('geen AP-koppeling', ap.x, ap.y + 20);
+      if (prefs.showApLoad) {
+        const kbps = ((ap.aggBps || 0) * 8 / 1000);
+        const kbpsTxt = kbps >= 1000 ? (kbps / 1000).toFixed(2) + ' mb/s' : kbps.toFixed(0) + ' kb/s';
+        ctx.fillStyle = 'rgba(150,210,255,0.55)';
+        ctx.font = '500 9px ui-monospace, "SF Mono", Menlo, monospace';
+        ctx.fillText(`${ap.clientCount || 0}× · ${kbpsTxt}`, ap.x, ap.y + 32);
+      }
+      continue;
+    }
+
     ctx.strokeStyle = `rgba(184,255,208,${0.55 + ap.glow * 0.35 + accent * 0.4})`;
     ctx.lineWidth = 1 + accent * 0.8;
     ctx.beginPath();
@@ -3267,6 +3310,36 @@ function drawSpec24() {
     c.font = (ch === 1 || ch === 6 || ch === 11 ? '600 ' : '') + '9px ui-monospace, monospace';
     c.textAlign = 'center';
     c.fillText(ch, x, h - 5);
+  }
+
+  // Zigbee-band overlay (kanaal 11..26 → 2405..2480 MHz, 2 MHz wide)
+  if (zigbeeInfo && zigbeeInfo.channel) {
+    const zCh = zigbeeInfo.channel;
+    const freqMhz = 2405 + 5 * (zCh - 11);
+    const wifiEquiv = (freqMhz - 2412) / 5 + 1;
+    const xL = spec24X(wifiEquiv - 0.2, w, padL, padR);
+    const xR = spec24X(wifiEquiv + 0.2, w, padL, padR);
+    if (xR > padL && xL < w - padR) {
+      const x0 = Math.max(padL, xL);
+      const x1 = Math.min(w - padR, xR);
+      const grad = c.createLinearGradient(0, padT, 0, h - padB);
+      grad.addColorStop(0, 'rgba(255,210,80,0.10)');
+      grad.addColorStop(1, 'rgba(255,210,80,0.30)');
+      c.fillStyle = grad;
+      c.fillRect(x0, padT, x1 - x0, h - padT - padB);
+      c.strokeStyle = 'rgba(255,210,80,0.85)';
+      c.lineWidth = 1.2;
+      c.setLineDash([4, 3]);
+      c.beginPath();
+      c.moveTo((x0 + x1) / 2, padT);
+      c.lineTo((x0 + x1) / 2, h - padB);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = 'rgba(255,225,140,0.95)';
+      c.font = '600 9px ui-monospace, monospace';
+      c.textAlign = 'left';
+      c.fillText(`Zigbee ${zCh}`, Math.min(x1 + 3, w - padR - 50), padT + 9);
+    }
   }
 
   spec24Hits.length = 0;
@@ -4633,3 +4706,650 @@ try { refreshChannels(); } catch (e) { console.error('refreshChannels init:', e)
   // Init: live
   goLive();
 })();
+
+// ─── Zigbee mesh + spectrum-band — live & interactief ────────────────────
+let zigbeeInfo = null;
+let zbPrevByIeee = new Map(); // for change-detection (LQI-flicker)
+const ZB_POS_KEY = 'aether:zigbee:positions';
+let zbPositions = (() => { try { return new Map(Object.entries(JSON.parse(localStorage.getItem(ZB_POS_KEY) || '{}'))); } catch { return new Map(); } })();
+let zbSelectedIeee = null;
+let zbHoverIeee = null;
+let zbDragIeee = null;
+let zbDragOffset = { x: 0, y: 0 };
+let zbActivity = new Map(); // ieee -> { ts: lastChange, intensity }
+let zbLayoutCache = null;
+
+async function fetchZigbeeInfo() {
+  try {
+    const r = await fetch('/api/zigbee/info');
+    const j = await r.json();
+    if (j.ok) {
+      // Detecteer LQI-veranderingen voor activity-glow
+      const now = performance.now();
+      for (const d of j.devices) {
+        const prev = zbPrevByIeee.get(d.ieee);
+        if (prev) {
+          const newBest = d.neighbors.length ? Math.max(...d.neighbors.map(n => n.lqi)) : null;
+          const oldBest = prev.neighbors.length ? Math.max(...prev.neighbors.map(n => n.lqi)) : null;
+          if (newBest !== oldBest && newBest != null) zbActivity.set(d.ieee, { ts: now, intensity: 1 });
+        }
+        zbPrevByIeee.set(d.ieee, d);
+      }
+      zigbeeInfo = j;
+      updateZigbeeOverlapHint();
+      if (prefs.tab === 'zigbee') refreshZigbee();
+    }
+  } catch (e) { /* silent */ }
+}
+
+function zigbeeWifiOverlap(zCh) {
+  const freq = 2405 + 5 * (zCh - 11);
+  for (let w = 1; w <= 13; w++) {
+    const wfreq = 2412 + 5 * (w - 1);
+    if (Math.abs(freq - wfreq) <= 11) return w;
+  }
+  return null;
+}
+
+function updateZigbeeOverlapHint() {
+  const el = document.getElementById('zb-overlap');
+  if (!el || !zigbeeInfo) return;
+  const ownNg = [];
+  for (const info of Object.values(apChannels || {})) {
+    for (const r of info.channels || []) {
+      if (r.band === 'ng' && r.channel) ownNg.push({ name: info.name, ch: r.channel });
+    }
+  }
+  const overlap = zigbeeWifiOverlap(zigbeeInfo.channel);
+  const hit = ownNg.find(a => a.ch === overlap);
+  if (hit) {
+    el.style.display = '';
+    document.getElementById('zb-overlap-ch').textContent = `${hit.ch} (${hit.name})`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function refreshZigbee() {
+  if (!zigbeeInfo) { fetchZigbeeInfo().then(() => refreshZigbee()); return; }
+  const z = zigbeeInfo;
+  document.getElementById('zb-channel').textContent = z.channel ?? '?';
+  document.getElementById('zb-pan').textContent = z.panId ? '0x' + z.panId.toString(16).toUpperCase() : '?';
+  document.getElementById('zb-total').textContent = z.devices.length;
+  document.getElementById('zb-routers').textContent = z.devices.filter(d => d.kind === 'router').length;
+  document.getElementById('zb-end').textContent = z.devices.filter(d => d.kind === 'end').length;
+  updateZigbeeOverlapHint();
+  fillZigbeeTable();
+  // Mesh wordt door de animatie-loop continu hertekend
+}
+
+function fillZigbeeTable() {
+  const tb = document.querySelector('#zb-table tbody');
+  if (!tb || !zigbeeInfo) return;
+  const rows = zigbeeInfo.devices.map(d => {
+    const best = d.neighbors.length ? Math.max(...d.neighbors.map(n => n.lqi)) : null;
+    return { ...d, _best: best };
+  }).sort((a, b) => {
+    const ord = { coordinator: 0, router: 1, end: 2 };
+    return (ord[a.kind] - ord[b.kind]) || (a.name || '').localeCompare(b.name || '');
+  });
+  tb.innerHTML = rows.map(d => {
+    const lqi = d._best;
+    const bar = lqi != null ? `<span style="display:inline-block;height:6px;width:${Math.min(100, lqi/2.55)}px;background:${lqi > 200 ? '#5fdf9a' : lqi > 120 ? '#e0c060' : '#e07060'};border-radius:3px"></span>` : '—';
+    const kindBadge = d.kind === 'coordinator' ? '🟢 coordinator' : d.kind === 'router' ? '🔵 router' : '⚪ end';
+    const sel = zbSelectedIeee === d.ieee ? ' style="background:rgba(184,255,208,0.10)"' : '';
+    return `<tr data-ieee="${d.ieee}"${sel}><td>${escHtml(d.name || '?')}</td><td>${kindBadge}</td><td style="font-size:10px;color:#9ab">${escHtml(d.model || '')}</td><td>${d.neighbors.length}</td><td>${lqi != null ? lqi : '—'} ${bar}</td></tr>`;
+  }).join('');
+  tb.querySelectorAll('tr[data-ieee]').forEach(tr => {
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => { zbSelectedIeee = tr.dataset.ieee; fillZigbeeTable(); });
+  });
+}
+
+function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function zbComputeLayout(cssW, cssH, devs) {
+  const cx = cssW / 2, cy = cssH / 2;
+  const r1 = Math.min(cssW, cssH) * 0.30;
+  const clusterR = Math.min(cssW, cssH) * 0.22;
+  const pos = new Map();
+  const angleByIeee = new Map();
+  const byIeee = new Map(devs.map(d => [d.ieee, d]));
+
+  // 1. Coordinator centraal
+  const coord = devs.find(d => d.kind === 'coordinator');
+  if (coord) {
+    pos.set(coord.ieee, { x: cx, y: cy });
+    angleByIeee.set(coord.ieee, 0);
+  }
+
+  // 2. Routers in ring rond coordinator
+  const routers = devs.filter(d => d.kind === 'router');
+  routers.forEach((d, i) => {
+    const a = (i / routers.length) * Math.PI * 2 - Math.PI / 2;
+    pos.set(d.ieee, { x: cx + Math.cos(a) * r1, y: cy + Math.sin(a) * r1 });
+    angleByIeee.set(d.ieee, a);
+  });
+
+  // 3. End-devices clusteren rond beste parent (router/coordinator op LQI)
+  const ends = devs.filter(d => d.kind === 'end');
+  const childrenByParent = new Map();
+  const orphans = [];
+  for (const e of ends) {
+    let best = null, bestLqi = -1;
+    // Forward: end's neighbors
+    for (const n of e.neighbors) {
+      const t = byIeee.get(n.ieee);
+      if (!t || (t.kind !== 'router' && t.kind !== 'coordinator')) continue;
+      if (n.lqi > bestLqi) { bestLqi = n.lqi; best = t.ieee; }
+    }
+    // Reverse: routers/coord die deze end zien
+    if (!best) {
+      const candidates = coord ? [...routers, coord] : routers;
+      for (const r of candidates) {
+        const link = (r.neighbors || []).find(n => n.ieee === e.ieee);
+        if (link && link.lqi > bestLqi) { bestLqi = link.lqi; best = r.ieee; }
+      }
+    }
+    if (best) {
+      if (!childrenByParent.has(best)) childrenByParent.set(best, []);
+      childrenByParent.get(best).push(e.ieee);
+    } else {
+      orphans.push(e.ieee);
+    }
+  }
+
+  // 4. Plaats end-devices in waaier naar buiten van parent
+  for (const [parentIeee, kids] of childrenByParent) {
+    const pp = pos.get(parentIeee); if (!pp) continue;
+    const baseAngle = angleByIeee.get(parentIeee) ?? 0;
+    const spread = Math.min(Math.PI * 1.1, 0.5 + kids.length * 0.22);
+    kids.forEach((kIeee, i) => {
+      const t = kids.length === 1 ? 0 : (i / (kids.length - 1)) - 0.5;
+      const a = baseAngle + t * spread;
+      // Twee ringen voor grote clusters zodat ze niet op elkaar staan
+      const ringIdx = (i % 2);
+      const r = clusterR * (0.95 + ringIdx * 0.35);
+      pos.set(kIeee, { x: pp.x + Math.cos(a) * r, y: pp.y + Math.sin(a) * r });
+    });
+  }
+
+  // 5. Orphans onderaan
+  orphans.forEach((ieee, i) => {
+    pos.set(ieee, { x: 60 + i * 26, y: cssH - 30 });
+  });
+
+  // 6. User-drag posities winnen
+  for (const [ieee, p] of zbPositions) {
+    if (pos.has(ieee)) pos.set(ieee, { x: p.x * cssW, y: p.y * cssH });
+  }
+  return pos;
+}
+
+function zbHitTest(mx, my) {
+  if (!zbLayoutCache) return null;
+  const { pos, devs } = zbLayoutCache;
+  let best = null, bestDist = Infinity;
+  for (const d of devs) {
+    const p = pos.get(d.ieee); if (!p) continue;
+    const r = d.kind === 'coordinator' ? 14 : d.kind === 'router' ? 9 : 6;
+    const dx = mx - p.x, dy = my - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= r + 4 && dist < bestDist) { best = d; bestDist = dist; }
+  }
+  return best;
+}
+
+function drawZigbeeMesh(tNow) {
+  const cv = document.getElementById('zb-mesh');
+  if (!cv || !zigbeeInfo) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = cv.clientHeight;
+  if (cv.width !== cssW * dpr || cv.height !== cssH * dpr) {
+    cv.width = cssW * dpr; cv.height = cssH * dpr;
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const devs = zigbeeInfo.devices;
+  const pos = zbComputeLayout(cssW, cssH, devs);
+  zbLayoutCache = { pos, devs, cssW, cssH };
+
+  // Welke edges zijn relevant voor selectie/hover?
+  const focus = zbSelectedIeee || zbHoverIeee;
+
+  // Edges + altijd-lopende particles
+  // Dedupe edges (router↔router komen vaak dubbel voor)
+  const seenEdge = new Set();
+  for (const d of devs) {
+    const p1 = pos.get(d.ieee); if (!p1) continue;
+    for (const n of d.neighbors) {
+      const p2 = pos.get(n.ieee); if (!p2) continue;
+      const key = [d.ieee, n.ieee].sort().join('|');
+      if (seenEdge.has(key)) continue;
+      seenEdge.add(key);
+
+      const lqi = n.lqi || 0;
+      const dim = focus && d.ieee !== focus && n.ieee !== focus;
+      const op = dim ? 0.04 : Math.max(0.08, Math.min(0.55, lqi / 255));
+      const baseCol = lqi > 200 ? '120,255,170' : lqi > 120 ? '255,200,90' : '255,120,90';
+      ctx.strokeStyle = `rgba(${baseCol},${op})`;
+      ctx.lineWidth = (dim ? 0.4 : 0.8) + (lqi / 255) * 1.4;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+
+      // Particles — altijd, dichtheid op LQI
+      if (lqi > 0 && !dim) {
+        const isFocusEdge = focus && (d.ieee === focus || n.ieee === focus);
+        const nParticles = isFocusEdge ? 4 : (lqi > 200 ? 2 : 1);
+        const speed = 0.0003 + (lqi / 255) * 0.0008;
+        const seed = d.ieee.charCodeAt(0) + n.ieee.charCodeAt(1);
+        for (let k = 0; k < nParticles; k++) {
+          const t = ((tNow * speed) + (k / nParticles) + (seed % 7) / 7) % 1;
+          const px = p1.x + (p2.x - p1.x) * t;
+          const py = p1.y + (p2.y - p1.y) * t;
+          const fade = isFocusEdge ? 1 : 0.55;
+          ctx.fillStyle = `rgba(${baseCol},${fade})`;
+          ctx.shadowColor = `rgba(${baseCol},0.6)`;
+          ctx.shadowBlur = isFocusEdge ? 6 : 3;
+          ctx.beginPath(); ctx.arc(px, py, isFocusEdge ? 2.6 : 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+
+  // Coordinator-pulse-ringen (concentrische rimpels)
+  const coordDev = devs.find(d => d.kind === 'coordinator');
+  if (coordDev) {
+    const cp = pos.get(coordDev.ieee);
+    if (cp) {
+      for (let i = 0; i < 3; i++) {
+        const phase = ((tNow * 0.0008 + i / 3) % 1);
+        const radius = 14 + phase * 70;
+        const alpha = (1 - phase) * 0.35;
+        ctx.strokeStyle = `rgba(95,223,154,${alpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(cp.x, cp.y, radius, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+  }
+
+  // Nodes — met breath-animatie
+  for (const d of devs) {
+    const p = pos.get(d.ieee); if (!p) continue;
+    const baseR = d.kind === 'coordinator' ? 12 : d.kind === 'router' ? 7 : 4.5;
+    const isFocus = (zbSelectedIeee === d.ieee) || (zbHoverIeee === d.ieee);
+    const dim = focus && !isFocus;
+
+    // breath: routers ademen op tNow, end-devices subtiel
+    const phase = (d.ieee.charCodeAt(0) % 10) / 10;
+    let breath = 0;
+    if (d.kind === 'coordinator') breath = Math.sin(tNow * 0.003) * 1.5;
+    else if (d.kind === 'router') breath = Math.sin(tNow * 0.0018 + phase * 6) * 0.8;
+    else breath = Math.sin(tNow * 0.0012 + phase * 6) * 0.4;
+    const r = baseR + breath + (isFocus ? 3 : 0);
+
+    // activity-pulse
+    const act = zbActivity.get(d.ieee);
+    let actGlow = 0;
+    if (act) {
+      const age = (tNow - act.ts) / 1000;
+      if (age < 4) actGlow = (1 - age / 4) * 18;
+    }
+
+    // basis-glow voor levendigheid
+    const baseGlow = d.kind === 'coordinator' ? 14 : d.kind === 'router' ? 6 : 2;
+    if (actGlow > 0 || isFocus || baseGlow > 0) {
+      ctx.shadowColor = d.kind === 'coordinator' ? 'rgba(95,223,154,0.7)' : d.kind === 'router' ? 'rgba(120,200,255,0.5)' : 'rgba(200,210,200,0.3)';
+      ctx.shadowBlur = isFocus ? 22 : Math.max(actGlow, baseGlow + breath * 2);
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    const col = d.kind === 'coordinator' ? '#5fdf9a' : d.kind === 'router' ? '#7ab0ff' : '#cccccc';
+    ctx.fillStyle = dim ? `${col}66` : col;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // labels — routers/coord groot, end-devices klein label
+    if (d.kind === 'end') {
+      ctx.fillStyle = dim ? 'rgba(140,160,150,0.35)' : 'rgba(180,200,190,0.7)';
+      ctx.font = (isFocus ? '600 9px' : '8px') + ' ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      const short = (d.name || '').replace(/^Temp\/[Vv]ocht\s*Sensor\s*/, '').replace(/^Deur ?Sensor\s*/i, '').replace(/^Deursensor\s*/i, '').slice(0, 18);
+      ctx.fillText(short, p.x, p.y + r + 10);
+    } else {
+      ctx.fillStyle = dim ? 'rgba(160,180,170,0.45)' : 'rgba(220,240,230,0.95)';
+      ctx.font = (isFocus ? '600 ' : '') + '11px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText((d.name || '').slice(0, 26), p.x, p.y + r + 13);
+    }
+  }
+
+  // Tooltip op hover
+  if (zbHoverIeee) {
+    const d = devs.find(x => x.ieee === zbHoverIeee);
+    const p = pos.get(zbHoverIeee);
+    if (d && p) {
+      const lines = [
+        d.name || '?',
+        `${d.kind} · ${d.model || ''}`,
+        `${d.neighbors.length} mesh-links`,
+        d.neighbors.length ? `beste LQI: ${Math.max(...d.neighbors.map(n => n.lqi))}` : '— geen mesh-links',
+      ];
+      const w = 220, h = 14 * lines.length + 12;
+      let bx = p.x + 14, by = p.y + 14;
+      if (bx + w > cssW) bx = p.x - w - 14;
+      if (by + h > cssH) by = p.y - h - 14;
+      ctx.fillStyle = 'rgba(10,16,14,0.92)';
+      ctx.strokeStyle = 'rgba(184,255,208,0.4)';
+      ctx.lineWidth = 1;
+      ctx.fillRect(bx, by, w, h);
+      ctx.strokeRect(bx, by, w, h);
+      ctx.textAlign = 'left';
+      ctx.font = '600 11px ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(220,240,230,0.95)';
+      ctx.fillText(lines[0], bx + 8, by + 14);
+      ctx.font = '10px ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(180,200,190,0.85)';
+      for (let i = 1; i < lines.length; i++) ctx.fillText(lines[i], bx + 8, by + 14 + 14 * i);
+    }
+  }
+}
+
+// Animatie-loop
+function zbAnimLoop(t) {
+  if (prefs.tab === 'zigbee' && zigbeeInfo) drawZigbeeMesh(t);
+  requestAnimationFrame(zbAnimLoop);
+}
+requestAnimationFrame(zbAnimLoop);
+
+// Mouse interactie op canvas
+function zbBindCanvas() {
+  const cv = document.getElementById('zb-mesh');
+  if (!cv || cv._zbBound) return;
+  cv._zbBound = true;
+  cv.style.cursor = 'default';
+  cv.addEventListener('mousemove', e => {
+    const rect = cv.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (zbDragIeee && zbLayoutCache) {
+      const { cssW, cssH } = zbLayoutCache;
+      zbPositions.set(zbDragIeee, { x: (mx - zbDragOffset.x) / cssW, y: (my - zbDragOffset.y) / cssH });
+    } else {
+      const hit = zbHitTest(mx, my);
+      const newHover = hit ? hit.ieee : null;
+      if (newHover !== zbHoverIeee) {
+        zbHoverIeee = newHover;
+        cv.style.cursor = newHover ? 'pointer' : 'default';
+      }
+    }
+  });
+  cv.addEventListener('mousedown', e => {
+    const rect = cv.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const hit = zbHitTest(mx, my);
+    if (hit && zbLayoutCache) {
+      zbDragIeee = hit.ieee;
+      const p = zbLayoutCache.pos.get(hit.ieee);
+      zbDragOffset = { x: mx - p.x, y: my - p.y };
+      cv.style.cursor = 'grabbing';
+    }
+  });
+  cv.addEventListener('mouseup', e => {
+    const rect = cv.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const hit = zbHitTest(mx, my);
+    if (zbDragIeee) {
+      // save positions
+      const obj = {};
+      for (const [k, v] of zbPositions) obj[k] = v;
+      try { localStorage.setItem(ZB_POS_KEY, JSON.stringify(obj)); } catch {}
+      cv.style.cursor = hit ? 'pointer' : 'default';
+      // korte click = select
+      const dist = Math.hypot(mx - (zbDragOffset.x + (zbLayoutCache?.pos.get(zbDragIeee)?.x || 0)), 0);
+      if (hit && hit.ieee === zbDragIeee && dist < 5) {
+        zbSelectedIeee = zbSelectedIeee === hit.ieee ? null : hit.ieee;
+        fillZigbeeTable();
+      }
+      zbDragIeee = null;
+    } else if (hit) {
+      zbSelectedIeee = zbSelectedIeee === hit.ieee ? null : hit.ieee;
+      fillZigbeeTable();
+    } else {
+      zbSelectedIeee = null;
+      fillZigbeeTable();
+    }
+  });
+  cv.addEventListener('mouseleave', () => { zbHoverIeee = null; });
+  cv.addEventListener('dblclick', e => {
+    const rect = cv.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const hit = zbHitTest(mx, my);
+    if (hit) {
+      // unpin: remove user-positie
+      zbPositions.delete(hit.ieee);
+      const obj = {};
+      for (const [k, v] of zbPositions) obj[k] = v;
+      try { localStorage.setItem(ZB_POS_KEY, JSON.stringify(obj)); } catch {}
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('zb-refresh');
+  if (btn) btn.addEventListener('click', () => fetchZigbeeInfo().then(refreshZigbee));
+  zbBindCanvas();
+});
+zbBindCanvas();
+
+// Live polling: 10s wanneer ZIGBEE-tab open, anders 60s
+let zbPollTimer = null;
+function startZigbeePoll() {
+  if (zbPollTimer) clearInterval(zbPollTimer);
+  const ms = prefs.tab === 'zigbee' ? 10000 : 60000;
+  zbPollTimer = setInterval(fetchZigbeeInfo, ms);
+}
+setInterval(startZigbeePoll, 5000); // herstart wanneer tab wisselt
+fetchZigbeeInfo();
+startZigbeePoll();
+
+// ─── REFERENCE-tab ────────────────────────────────────────────────────────
+function refreshReference() {
+  if (typeof neighbors === 'undefined') return;
+
+  // Tellen 2.4 GHz buren per kanaal
+  const cnt24 = {};
+  const cnt5 = {};
+  let total = 0;
+  for (const n of neighbors.values()) {
+    if (!n.channel) continue;
+    if (n.band === 'ng' && n.channel <= 13) {
+      cnt24[n.channel] = (cnt24[n.channel] || 0) + 1; total++;
+    } else if (n.band === 'na') {
+      cnt5[n.channel] = (cnt5[n.channel] || 0) + 1; total++;
+    }
+  }
+  document.getElementById('ref-neighbor-count').textContent = total;
+  if (zigbeeInfo) document.getElementById('ref-zb-now').textContent = `Zigbee-kanaal ${zigbeeInfo.channel}`;
+
+  // 2.4 GHz tabel + bar
+  const tbl24 = document.getElementById('ref-24tbl');
+  const own24 = new Set();
+  for (const ap of Object.values(apChannels || {})) {
+    for (const r of ap.channels || []) if (r.band === 'ng') own24.add(r.channel);
+  }
+  const rows24 = [];
+  for (let ch = 1; ch <= 13; ch++) {
+    const buren = cnt24[ch] || 0;
+    const freq = 2412 + 5 * (ch - 1);
+    const overlap = own24.has(ch) ? '<b style="color:#5fdf9a">JOUW AP</b>' : '';
+    let aanbev = '–';
+    let opm = '';
+    if (ch === 1 || ch === 6 || ch === 11) {
+      aanbev = '<b style="color:#5fdf9a">JA</b>'; opm = 'niet-overlappend';
+    } else {
+      aanbev = '<span style="color:#e07060">nee</span>'; opm = 'overlapt buren';
+    }
+    if (ch >= 12) opm += ' · alleen EU';
+    if (ch === 1 || ch === 11 || ch === 6) {
+      const overlapZb = ch === 1 ? '11-13' : ch === 6 ? '14-17' : '20-23';
+      opm += ` · Zigbee-overlap: ${overlapZb}`;
+    }
+    rows24.push(`<tr${overlap ? ' style="background:rgba(95,223,154,0.07)"' : ''}><td><b>${ch}</b> ${overlap}</td><td>${freq} MHz</td><td>${buren}</td><td>${aanbev}</td><td style="font-size:11px;color:#9ab">${opm}</td></tr>`);
+  }
+  if (tbl24) tbl24.innerHTML = rows24.join('');
+  drawRefSpec24(cnt24, own24);
+
+  // 5 GHz tabel + bar
+  const tbl5 = document.getElementById('ref-5tbl');
+  const own5 = new Set();
+  for (const ap of Object.values(apChannels || {})) {
+    for (const r of ap.channels || []) if (r.band === 'na') own5.add(r.channel);
+  }
+  const sumZone = (chs) => chs.reduce((s, c) => s + (cnt5[c] || 0), 0);
+  const ownIn = (chs) => chs.some(c => own5.has(c));
+  const zones = [
+    { name: 'UNII-1', chs: [36, 40, 44, 48], dfs: false, eirp: '200 mW', opm: 'altijd vrij, 4 kanalen' },
+    { name: 'UNII-2A', chs: [52, 56, 60, 64], dfs: true, eirp: '200 mW', opm: 'DFS, weinig radar in NL' },
+    { name: 'UNII-2C', chs: [100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144], dfs: true, eirp: '1 W', opm: '100-128 weer-radar; 132-144 rustiger' },
+    { name: 'UNII-3', chs: [149, 153, 157, 161, 165], dfs: false, eirp: '25 mW', opm: 'alleen op nieuwere EU-firmware' },
+  ];
+  if (tbl5) tbl5.innerHTML = zones.map(z => {
+    const own = ownIn(z.chs) ? '<b style="color:#5fdf9a">JOUW AP</b>' : '';
+    return `<tr${own ? ' style="background:rgba(95,223,154,0.07)"' : ''}><td><b>${z.name}</b> ${own}</td><td>${z.chs.join(', ')}</td><td>${z.dfs ? '⚠ ja' : 'nee'}</td><td>${z.eirp}</td><td>${sumZone(z.chs)}</td><td style="font-size:11px;color:#9ab">${z.opm}</td></tr>`;
+  }).join('');
+  drawRefSpec5(cnt5, own5);
+
+  // Zigbee tabel
+  const tblZb = document.getElementById('ref-zbtbl');
+  if (tblZb) {
+    const wifiOwn24 = own24;
+    const rowsZb = [];
+    const used = zigbeeInfo ? zigbeeInfo.channel : null;
+    for (let zc = 11; zc <= 26; zc++) {
+      const freq = 2405 + 5 * (zc - 11);
+      const wifiOverlapCh = zigbeeWifiOverlap(zc);
+      const collide = wifiOverlapCh && wifiOwn24.has(wifiOverlapCh);
+      const sweet = (zc === 25 || zc === 26);
+      const inUse = used === zc;
+      let aanbev;
+      if (collide) aanbev = '<span style="color:#e07060">vermijd — botst met je AP</span>';
+      else if (sweet) aanbev = '<b style="color:#5fdf9a">sweet-spot</b>';
+      else aanbev = 'ok';
+      rowsZb.push(`<tr${inUse ? ' style="background:rgba(255,210,80,0.10)"' : ''}><td><b>${zc}</b>${inUse ? ' ← jouw mesh' : ''}</td><td>${freq} MHz</td><td>${wifiOverlapCh ? 'WiFi ' + wifiOverlapCh : '–'}</td><td>${aanbev}</td></tr>`);
+    }
+    tblZb.innerHTML = rowsZb.join('');
+  }
+}
+
+function drawRefSpec24(cnt, own) {
+  const cv = document.getElementById('ref-spec24');
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = cv.clientHeight;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const padL = 36, padR = 12, padT = 14, padB = 28;
+  const max = Math.max(1, ...Object.values(cnt));
+  const w = cssW - padL - padR, h = cssH - padT - padB;
+  // y-as
+  ctx.fillStyle = 'rgba(160,200,180,0.5)'; ctx.font = '9px ui-monospace';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (h * i / 4);
+    const v = Math.round(max * (1 - i / 4));
+    ctx.fillText(v, padL - 4, y + 3);
+    ctx.strokeStyle = 'rgba(184,255,208,0.06)';
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+  }
+  // bars
+  const barW = w / 13 * 0.7;
+  for (let ch = 1; ch <= 13; ch++) {
+    const v = cnt[ch] || 0;
+    const x = padL + ((ch - 0.5) / 13) * w;
+    const bh = (v / max) * h;
+    const isOwn = own.has(ch);
+    const isPrim = (ch === 1 || ch === 6 || ch === 11);
+    ctx.fillStyle = isOwn ? '#5fdf9a' : isPrim ? 'rgba(184,255,208,0.6)' : 'rgba(255,160,110,0.6)';
+    ctx.fillRect(x - barW / 2, padT + h - bh, barW, bh);
+    ctx.fillStyle = isPrim ? 'rgba(220,240,230,0.95)' : 'rgba(180,200,190,0.7)';
+    ctx.font = (isPrim ? '600 ' : '') + '10px ui-monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(ch, x, padT + h + 14);
+    if (v > 0) { ctx.fillStyle = 'rgba(220,240,230,0.85)'; ctx.font = '9px ui-monospace'; ctx.fillText(v, x, padT + h - bh - 4); }
+  }
+  // Zigbee marker
+  if (zigbeeInfo && zigbeeInfo.channel) {
+    const zCh = zigbeeInfo.channel;
+    const freq = 2405 + 5 * (zCh - 11);
+    const wifiEquiv = (freq - 2412) / 5 + 1;
+    const x = padL + ((wifiEquiv - 0.5) / 13) * w;
+    if (x > padL && x < cssW - padR) {
+      ctx.strokeStyle = 'rgba(255,210,80,0.85)'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + h); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,225,140,0.95)'; ctx.font = '600 9px ui-monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Zigbee ${zCh}`, x + 4, padT + 10);
+    }
+  }
+}
+
+function drawRefSpec5(cnt, own) {
+  const cv = document.getElementById('ref-spec5');
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = cv.clientWidth, cssH = cv.clientHeight;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  const padL = 36, padR = 12, padT = 14, padB = 28;
+  const w = cssW - padL - padR, h = cssH - padT - padB;
+  const channels = [36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 149, 153, 157, 161, 165];
+  const max = Math.max(1, ...Object.values(cnt));
+  const dfsSet = new Set([52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144]);
+  // grid
+  ctx.fillStyle = 'rgba(160,200,180,0.5)'; ctx.font = '9px ui-monospace';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (h * i / 4);
+    const v = Math.round(max * (1 - i / 4));
+    ctx.fillText(v, padL - 4, y + 3);
+    ctx.strokeStyle = 'rgba(184,255,208,0.06)';
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(cssW - padR, y); ctx.stroke();
+  }
+  // DFS-zone shading
+  const zoneStart = channels.indexOf(52);
+  const zoneEnd = channels.indexOf(144);
+  if (zoneStart >= 0 && zoneEnd >= 0) {
+    const x0 = padL + (zoneStart / channels.length) * w;
+    const x1 = padL + ((zoneEnd + 1) / channels.length) * w;
+    ctx.fillStyle = 'rgba(255,210,80,0.05)';
+    ctx.fillRect(x0, padT, x1 - x0, h);
+    ctx.fillStyle = 'rgba(255,210,80,0.4)';
+    ctx.font = '9px ui-monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('DFS-zone', (x0 + x1) / 2, padT + 10);
+  }
+  // bars
+  const barW = w / channels.length * 0.7;
+  channels.forEach((ch, i) => {
+    const v = cnt[ch] || 0;
+    const x = padL + ((i + 0.5) / channels.length) * w;
+    const bh = (v / max) * h;
+    const isOwn = own.has(ch);
+    ctx.fillStyle = isOwn ? '#5fdf9a' : dfsSet.has(ch) ? 'rgba(255,210,80,0.5)' : 'rgba(120,180,255,0.5)';
+    ctx.fillRect(x - barW / 2, padT + h - bh, barW, bh);
+    ctx.fillStyle = 'rgba(180,200,190,0.7)';
+    ctx.font = '8px ui-monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(ch, x, padT + h + 12);
+    if (v > 0) { ctx.fillStyle = 'rgba(220,240,230,0.85)'; ctx.font = '9px ui-monospace'; ctx.fillText(v, x, padT + h - bh - 4); }
+  });
+}
+
+// Re-render on window resize
+window.addEventListener('resize', () => {
+  if (prefs.tab === 'reference' && typeof refreshReference === 'function') refreshReference();
+});
